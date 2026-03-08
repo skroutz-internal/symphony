@@ -1827,4 +1827,74 @@ defmodule SymphonyElixir.CoreTest do
       File.rm_rf(test_root)
     end
   end
+
+  test "github tracker kind validates with required fields" do
+    write_workflow_file!(Workflow.workflow_file_path(),
+      tracker_kind: "github",
+      tracker_project_owner_type: "org",
+      tracker_project_owner: "acme",
+      tracker_project_number: 1,
+      tracker_project_repositories: ["owner/repo"],
+      tracker_api_token: "ghp_test123"
+    )
+
+    assert :ok = Config.validate!()
+  end
+
+  test "github tracker kind rejects missing project owner type" do
+    write_workflow_file!(Workflow.workflow_file_path(),
+      tracker_kind: "github",
+      tracker_project_owner_type: nil,
+      tracker_project_owner: "acme",
+      tracker_project_number: 1,
+      tracker_api_token: "ghp_test123"
+    )
+
+    assert {:error, :missing_github_project_owner_type} = Config.validate!()
+  end
+
+  test "github tracker kind rejects missing project_number" do
+    write_workflow_file!(Workflow.workflow_file_path(),
+      tracker_kind: "github",
+      tracker_project_owner_type: "org",
+      tracker_project_owner: "acme",
+      tracker_project_number: nil,
+      tracker_api_token: "ghp_test123"
+    )
+
+    assert {:error, :missing_github_project_number} = Config.validate!()
+  end
+
+  test "github tracker kind rejects missing api token" do
+    write_workflow_file!(Workflow.workflow_file_path(),
+      tracker_kind: "github",
+      tracker_project_owner_type: "org",
+      tracker_project_owner: "acme",
+      tracker_project_number: 1,
+      tracker_project_repositories: ["owner/repo"],
+      tracker_api_token: nil
+    )
+
+    assert {:error, :missing_github_api_token} = Config.validate!()
+  end
+
+  test "github config accessors" do
+    write_workflow_file!(Workflow.workflow_file_path(),
+      tracker_kind: "github",
+      tracker_project_owner_type: "org",
+      tracker_project_owner: "acme",
+      tracker_project_number: 7,
+      tracker_project_repositories: ["acme/widget"],
+      tracker_api_token: "ghp_xxx"
+    )
+
+    tracker = Config.settings!().tracker
+
+    assert tracker.kind == "github"
+    assert tracker.project_owner_type == "org"
+    assert tracker.project_owner == "acme"
+    assert tracker.project_number == 7
+    assert tracker.project_repositories == ["acme/widget"]
+    assert tracker.api_key == "ghp_xxx"
+  end
 end

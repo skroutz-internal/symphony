@@ -205,6 +205,20 @@ defmodule SymphonyElixir.ExtensionsTest do
     assert SymphonyElixir.Tracker.adapter() == Adapter
   end
 
+  test "tracker adapter returns GitHub.Adapter for kind github" do
+    write_workflow_file!(Workflow.workflow_file_path(),
+      tracker_kind: "github",
+      tracker_project_owner_type: "org",
+      tracker_project_owner: "acme",
+      tracker_project_number: 1,
+      tracker_project_repositories: ["owner/repo"],
+      tracker_api_token: "ghp_test"
+    )
+
+    assert Config.settings!().tracker.kind == "github"
+    assert SymphonyElixir.Tracker.adapter() == SymphonyElixir.GitHub.Adapter
+  end
+
   test "linear adapter delegates reads and validates mutation responses" do
     Application.put_env(:symphony_elixir, :linear_client_module, FakeLinearClient)
 

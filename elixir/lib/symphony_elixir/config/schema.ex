@@ -50,6 +50,10 @@ defmodule SymphonyElixir.Config.Schema do
       field(:api_key, :string)
       field(:project_slug, :string)
       field(:assignee, :string)
+      field(:project_owner_type, :string)
+      field(:project_owner, :string)
+      field(:project_number, :integer)
+      field(:project_repositories, {:array, :string}, default: [])
       field(:active_states, {:array, :string}, default: ["Todo", "In Progress"])
       field(:terminal_states, {:array, :string}, default: ["Closed", "Cancelled", "Canceled", "Duplicate", "Done"])
     end
@@ -59,7 +63,19 @@ defmodule SymphonyElixir.Config.Schema do
       schema
       |> cast(
         attrs,
-        [:kind, :endpoint, :api_key, :project_slug, :assignee, :active_states, :terminal_states],
+        [
+          :kind,
+          :endpoint,
+          :api_key,
+          :project_slug,
+          :assignee,
+          :project_owner_type,
+          :project_owner,
+          :project_number,
+          :project_repositories,
+          :active_states,
+          :terminal_states
+        ],
         empty_values: []
       )
     end
