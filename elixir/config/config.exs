@@ -1,5 +1,7 @@
 import Config
 
+config :logger, level: :debug
+
 config :phoenix, :json_library, Jason
 
 config :symphony_elixir, SymphonyElixirWeb.Endpoint,
