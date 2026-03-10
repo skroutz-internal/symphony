@@ -5,6 +5,8 @@ defmodule SymphonyElixir.GitHub.Adapter do
   Delegates to a swappable client module (defaults to `SymphonyElixir.GitHub.Client`).
   """
 
+  require Logger
+
   @behaviour SymphonyElixir.Tracker
 
   alias SymphonyElixir.Config
@@ -81,6 +83,10 @@ defmodule SymphonyElixir.GitHub.Adapter do
 
   defp fetch_and_filter(states) do
     tracker = Config.settings!().tracker
+
+    Logger.debug(
+      "GitHub fetch_and_filter owner_type=#{tracker.project_owner_type} owner=#{tracker.project_owner} project=#{tracker.project_number} states=#{inspect(states)}"
+    )
 
     with {:ok, items} <-
            client_module().fetch_project_items(

@@ -3,6 +3,8 @@ defmodule SymphonyElixir.GitHub.Client do
   GitHub REST + GraphQL client for project management operations.
   """
 
+  require Logger
+
   @graphql_endpoint "https://api.github.com/graphql"
   @rest_base "https://api.github.com"
 
@@ -291,14 +293,22 @@ defmodule SymphonyElixir.GitHub.Client do
 
     request_fun = Keyword.get(opts, :graphql_request_fun, default_fun)
 
+    Logger.debug("GitHub GraphQL request, query_head=#{String.slice(query, 0, 60)}")
+
     case request_fun.(query, variables, token) do
+      {:ok, %{status: 200, body: %{"errors" => errors} = body}} when is_list(errors) ->
+        {:error, {:github_graphql_errors, errors, body}}
+
       {:ok, %{status: 200, body: body}} ->
+        Logger.debug("GitHub GraphQL OK")
         {:ok, body}
 
       {:ok, %{status: status}} ->
+        Logger.warning("GitHub GraphQL status=#{status}")
         {:error, {:github_api_status, status}}
 
       {:error, reason} ->
+        Logger.warning("GitHub GraphQL error reason=#{inspect(reason)}")
         {:error, {:github_api_request, reason}}
     end
   end
