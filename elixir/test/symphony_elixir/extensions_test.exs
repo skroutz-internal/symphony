@@ -233,6 +233,7 @@ defmodule SymphonyElixir.ExtensionsTest do
 
     assert Config.settings!().tracker.kind == "memory"
     assert SymphonyElixir.Tracker.adapter() == Memory
+    assert SymphonyElixir.Tracker.dynamic_tool() == SymphonyElixir.Codex.NoopDynamicTool
     assert {:ok, [^issue]} = SymphonyElixir.Tracker.fetch_candidate_issues()
     assert {:ok, [^issue]} = SymphonyElixir.Tracker.fetch_issues_by_states([" in progress ", 42])
     assert {:ok, [^issue]} = SymphonyElixir.Tracker.fetch_issue_states_by_ids(["issue-1"])
@@ -247,6 +248,7 @@ defmodule SymphonyElixir.ExtensionsTest do
 
     write_workflow_file!(Workflow.workflow_file_path(), tracker_kind: "linear")
     assert SymphonyElixir.Tracker.adapter() == Adapter
+    assert SymphonyElixir.Tracker.dynamic_tool() == SymphonyElixir.Codex.DynamicTool
   end
 
   test "tracker adapter returns GitHub.Adapter for kind github" do
