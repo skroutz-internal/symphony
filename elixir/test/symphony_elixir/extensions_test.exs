@@ -39,6 +39,50 @@ defmodule SymphonyElixir.ExtensionsTest do
     end
   end
 
+  defmodule FakeGitHubClient do
+    def fetch_project_items(_token, _owner_type, _owner, _project_number, _opts \\ []) do
+      send(self(), :github_fetch_project_items_called)
+      Process.get({__MODULE__, :fetch_project_items_result})
+    end
+
+    def fetch_project_item_by_issue(
+          _token,
+          _owner_type,
+          _owner,
+          _project_number,
+          _repo,
+          issue_number,
+          _opts \\ []
+        ) do
+      send(self(), {:github_fetch_project_item_by_issue_called, issue_number})
+      Process.get({__MODULE__, :fetch_project_item_by_issue_result})
+    end
+
+    def create_comment(_token, _repo, issue_number, body, _opts \\ []) do
+      send(self(), {:github_create_comment_called, issue_number, body})
+      Process.get({__MODULE__, :create_comment_result}, :ok)
+    end
+
+    def update_item_status(
+          _token,
+          _owner_type,
+          _owner,
+          _project_number,
+          _repo,
+          issue_number,
+          state_name,
+          _opts \\ []
+        ) do
+      send(self(), {:github_update_item_status_called, issue_number, state_name})
+      Process.get({__MODULE__, :update_item_status_result}, :ok)
+    end
+
+    def close_issue(_token, _repo, issue_number, _opts \\ []) do
+      send(self(), {:github_close_issue_called, issue_number})
+      Process.get({__MODULE__, :close_issue_result}, :ok)
+    end
+  end
+
   defmodule SlowOrchestrator do
     use GenServer
 
@@ -217,6 +261,100 @@ defmodule SymphonyElixir.ExtensionsTest do
 
     assert Config.settings!().tracker.kind == "github"
     assert SymphonyElixir.Tracker.adapter() == SymphonyElixir.GitHub.Adapter
+  end
+
+  test "github tracker: full round-trip through Tracker module" do
+    Application.put_env(:symphony_elixir, :github_client_module, FakeGitHubClient)
+
+    write_workflow_file!(Workflow.workflow_file_path(),
+      tracker_kind: "github",
+      tracker_project_owner_type: "org",
+      tracker_project_owner: "acme",
+      tracker_project_number: 1,
+      tracker_project_repositories: ["owner/repo"],
+      tracker_api_token: "ghp_test"
+    )
+
+    project_item = %{
+      "id" => "PVTI_1",
+      "fieldValueByName" => %{
+        "__typename" => "ProjectV2ItemFieldSingleSelectValue",
+        "name" => "Todo"
+      },
+      "content" => %{
+        "__typename" => "Issue",
+        "number" => 1,
+        "title" => "Fix the thing",
+        "body" => "description",
+        "url" => "https://github.com/owner/repo/issues/1",
+        "repository" => %{"name" => "repo", "owner" => %{"login" => "owner"}},
+        "state" => "OPEN",
+        "createdAt" => "2026-01-01T00:00:00Z",
+        "updatedAt" => "2026-01-01T00:00:00Z",
+        "labels" => %{"nodes" => []},
+        "assignees" => %{"nodes" => []}
+      }
+    }
+
+    Process.put({FakeGitHubClient, :fetch_project_items_result}, {:ok, [project_item]})
+    assert {:ok, [issue]} = SymphonyElixir.Tracker.fetch_candidate_issues()
+    assert issue.identifier == "owner/repo#1"
+    assert issue.state == "Todo"
+    assert_receive :github_fetch_project_items_called
+
+    assert :ok = SymphonyElixir.Tracker.create_comment(issue.id, "workpad")
+    assert_receive {:github_create_comment_called, 1, "workpad"}
+
+    assert :ok = SymphonyElixir.Tracker.update_issue_state(issue.id, "In Progress")
+    assert_receive {:github_update_item_status_called, 1, "In Progress"}
+    refute_receive {:github_close_issue_called, _}
+
+    Application.delete_env(:symphony_elixir, :github_client_module)
+  end
+
+  test "github tracker: composite issue ID survives round-trip through fetch_issue_states_by_ids" do
+    Application.put_env(:symphony_elixir, :github_client_module, FakeGitHubClient)
+
+    write_workflow_file!(Workflow.workflow_file_path(),
+      tracker_kind: "github",
+      tracker_project_owner_type: "org",
+      tracker_project_owner: "acme",
+      tracker_project_number: 1,
+      tracker_project_repositories: ["owner/repo"],
+      tracker_api_token: "ghp_test"
+    )
+
+    project_item = %{
+      "id" => "PVTI_1",
+      "fieldValueByName" => %{
+        "__typename" => "ProjectV2ItemFieldSingleSelectValue",
+        "name" => "Todo"
+      },
+      "content" => %{
+        "__typename" => "Issue",
+        "number" => 1,
+        "title" => "Fix the thing",
+        "body" => "description",
+        "url" => "https://github.com/owner/repo/issues/1",
+        "repository" => %{"name" => "repo", "owner" => %{"login" => "owner"}},
+        "state" => "OPEN",
+        "createdAt" => "2026-01-01T00:00:00Z",
+        "updatedAt" => "2026-01-01T00:00:00Z",
+        "labels" => %{"nodes" => []},
+        "assignees" => %{"nodes" => []}
+      }
+    }
+
+    Process.put({FakeGitHubClient, :fetch_project_item_by_issue_result}, {:ok, project_item})
+    assert {:ok, [issue]} = SymphonyElixir.Tracker.fetch_issue_states_by_ids(["owner/repo#1"])
+    assert issue.id == "owner/repo#1"
+    assert_receive {:github_fetch_project_item_by_issue_called, 1}
+
+    assert :ok = SymphonyElixir.Tracker.update_issue_state(issue.id, "Done")
+    assert_receive {:github_update_item_status_called, 1, "Done"}
+    assert_receive {:github_close_issue_called, 1}
+
+    Application.delete_env(:symphony_elixir, :github_client_module)
   end
 
   test "linear adapter delegates reads and validates mutation responses" do
