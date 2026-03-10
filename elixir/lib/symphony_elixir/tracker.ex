@@ -3,7 +3,7 @@ defmodule SymphonyElixir.Tracker do
   Adapter boundary for issue tracker reads and writes.
   """
 
-  alias SymphonyElixir.Config
+  alias SymphonyElixir.{Codex, Config}
 
   @callback fetch_candidate_issues() :: {:ok, [term()]} | {:error, term()}
   @callback fetch_issues_by_states([String.t()]) :: {:ok, [term()]} | {:error, term()}
@@ -41,6 +41,14 @@ defmodule SymphonyElixir.Tracker do
     case Config.settings!().tracker.kind do
       "memory" -> SymphonyElixir.Tracker.Memory
       _ -> SymphonyElixir.Linear.Adapter
+    end
+  end
+
+  @spec dynamic_tool() :: module()
+  def dynamic_tool do
+    case Config.settings!().tracker.kind do
+      "memory" -> Codex.NoopDynamicTool
+      _ -> Codex.DynamicTool
     end
   end
 end
