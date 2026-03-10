@@ -831,6 +831,121 @@ defmodule SymphonyElixir.AppServerTest do
     end
   end
 
+  test "app server advertises github dynamic tools for github tracker" do
+    test_root =
+      Path.join(
+        System.tmp_dir!(),
+        "symphony-elixir-app-server-github-tools-#{System.unique_integer([:positive])}"
+      )
+
+    try do
+      workspace_root = Path.join(test_root, "workspaces")
+      workspace = Path.join(workspace_root, "MT-90GH")
+      codex_binary = Path.join(test_root, "fake-codex")
+      trace_file = Path.join(test_root, "codex-github-tools.trace")
+      previous_trace = System.get_env("SYMP_TEST_CODEx_TRACE")
+
+      on_exit(fn ->
+        if is_binary(previous_trace) do
+          System.put_env("SYMP_TEST_CODEx_TRACE", previous_trace)
+        else
+          System.delete_env("SYMP_TEST_CODEx_TRACE")
+        end
+      end)
+
+      System.put_env("SYMP_TEST_CODEx_TRACE", trace_file)
+      File.mkdir_p!(workspace)
+
+      File.write!(codex_binary, """
+      #!/bin/sh
+      trace_file="${SYMP_TEST_CODEx_TRACE:-/tmp/codex-github-tools.trace}"
+      count=0
+      while IFS= read -r line; do
+        count=$((count + 1))
+        printf 'JSON:%s\\n' \"$line\" >> \"$trace_file\"
+
+        case \"$count\" in
+          1)
+            printf '%s\\n' '{"id":1,"result":{}}'
+            ;;
+          2)
+            ;;
+          3)
+            printf '%s\\n' '{"id":2,"result":{"thread":{"id":"thread-90gh"}}}'
+            ;;
+          4)
+            printf '%s\\n' '{"id":3,"result":{"turn":{"id":"turn-90gh"}}}'
+            printf '%s\\n' '{"method":"turn/completed"}'
+            exit 0
+            ;;
+          *)
+            exit 0
+            ;;
+        esac
+      done
+      """)
+
+      File.chmod!(codex_binary, 0o755)
+
+      write_workflow_file!(Workflow.workflow_file_path(),
+        tracker_kind: "github",
+        tracker_project_owner_type: "org",
+        tracker_project_owner: "acme",
+        tracker_project_number: 1,
+        tracker_project_repositories: ["owner/repo"],
+        tracker_api_token: "ghp_test_token",
+        workspace_root: workspace_root,
+        codex_command: "#{codex_binary} app-server"
+      )
+
+      issue = %Issue{
+        id: "owner/repo#1:PVTI_1",
+        identifier: "owner/repo#1",
+        title: "GitHub tracker tools",
+        description: "Ensure GitHub tracker advertises GitHub dynamic tools",
+        state: "Todo",
+        url: "https://github.com/owner/repo/issues/1",
+        labels: ["backend"]
+      }
+
+      assert {:ok, _result} = AppServer.run(workspace, "Advertise github tracker tools", issue)
+
+      trace = File.read!(trace_file)
+      lines = String.split(trace, "\n", trim: true)
+
+      assert Enum.any?(lines, fn line ->
+               if String.starts_with?(line, "JSON:") do
+                 payload =
+                   line
+                   |> String.trim_leading("JSON:")
+                   |> Jason.decode!()
+
+                 case get_in(payload, ["params", "dynamicTools"]) do
+                   tools when is_list(tools) ->
+                     Enum.any?(tools, fn
+                       %{
+                         "description" => description,
+                         "inputSchema" => %{"required" => ["request"]},
+                         "name" => "github_agent"
+                       } ->
+                         payload["id"] == 2 and description =~ "GitHub"
+
+                       _ ->
+                         false
+                     end)
+
+                   _ ->
+                     false
+                 end
+               else
+                 false
+               end
+             end)
+    after
+      File.rm_rf(test_root)
+    end
+  end
+
   test "app server rejects unsupported dynamic tool calls without stalling" do
     test_root =
       Path.join(

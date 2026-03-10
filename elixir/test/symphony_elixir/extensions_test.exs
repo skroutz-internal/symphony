@@ -263,6 +263,7 @@ defmodule SymphonyElixir.ExtensionsTest do
 
     assert Config.settings!().tracker.kind == "github"
     assert SymphonyElixir.Tracker.adapter() == SymphonyElixir.GitHub.Adapter
+    assert SymphonyElixir.Tracker.dynamic_tool() == SymphonyElixir.GitHub.DynamicTool
   end
 
   test "github tracker: full round-trip through Tracker module" do

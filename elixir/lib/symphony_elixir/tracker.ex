@@ -49,6 +49,7 @@ defmodule SymphonyElixir.Tracker do
   def dynamic_tool do
     case Config.settings!().tracker.kind do
       "memory" -> Codex.NoopDynamicTool
+      "github" -> SymphonyElixir.GitHub.DynamicTool
       _ -> Codex.DynamicTool
     end
   end
