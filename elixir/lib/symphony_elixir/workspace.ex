@@ -298,7 +298,11 @@ defmodule SymphonyElixir.Workspace do
 
     task =
       Task.async(fn ->
-        System.cmd("sh", ["-lc", command], cd: workspace, stderr_to_stdout: true)
+        System.cmd("sh", ["-lc", command],
+          cd: workspace,
+          env: hook_env(issue_context),
+          stderr_to_stdout: true
+        )
       end)
 
     case Task.yield(task, timeout_ms) do
@@ -353,6 +357,17 @@ defmodule SymphonyElixir.Workspace do
       false ->
         binary_part(binary_output, 0, max_bytes) <> "... (truncated)"
     end
+  end
+
+  defp hook_env(issue_context) when is_map(issue_context) do
+    issue_context
+    |> Enum.sort_by(fn {key, _value} -> to_string(key) end)
+    |> Enum.map(fn {key, value} ->
+      {
+        ("SYMPHONY_" <> to_string(key)) |> String.upcase(),
+        if(is_nil(value), do: "", else: to_string(value))
+      }
+    end)
   end
 
   defp validate_workspace_path(workspace, nil) when is_binary(workspace) do
