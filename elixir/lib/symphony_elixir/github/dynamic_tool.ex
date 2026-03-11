@@ -8,6 +8,8 @@ defmodule SymphonyElixir.GitHub.DynamicTool do
   behavior is implemented.
   """
 
+  use SymphonyElixir.GitHub.PushToSymphonyMixin
+
   @github_agent_tool "github_agent"
   @github_agent_description """
   Ask the GitHub agent to do something on GitHub. Pass a natural-language
@@ -31,6 +33,9 @@ defmodule SymphonyElixir.GitHub.DynamicTool do
       @github_agent_tool ->
         execute_github_agent(arguments)
 
+      @push_to_symphony_tool ->
+        execute_push_to_symphony(arguments)
+
       other ->
         failure_response(%{
           "error" => %{
@@ -48,7 +53,8 @@ defmodule SymphonyElixir.GitHub.DynamicTool do
         "name" => @github_agent_tool,
         "description" => @github_agent_description,
         "inputSchema" => @github_agent_input_schema
-      }
+      },
+      push_to_symphony_tool_spec()
     ]
   end
 
