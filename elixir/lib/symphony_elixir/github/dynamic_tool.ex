@@ -3,18 +3,22 @@ defmodule SymphonyElixir.GitHub.DynamicTool do
   Execution engine for GitHub dynamic tools exposed through the pi-agent
   integration.
 
-  For now this exposes a single dummy tool, `github_agent`, so the pi-agent
-  integration can exercise the dynamic-tool plumbing before real GitHub
-  behavior is implemented.
+  The `github_agent` tool is intentionally a failing guidance tool: it nudges
+  the model toward the already-available `gh` CLI while reinforcing the rule
+  that GitHub operations must stay within the configured project/repository
+  scope for the current run.
   """
 
   use SymphonyElixir.GitHub.PushToSymphonyMixin
 
   @github_agent_tool "github_agent"
   @github_agent_description """
-  Ask the GitHub agent to do something on GitHub. Pass a natural-language
-  request describing what you want done.
+  Guidance-only fallback for GitHub work. If you think you need this tool, use
+  the working `gh` CLI instead. Stay strictly within the configured GitHub
+  project and allowed repositories for this run, and do not touch unrelated
+  GitHub data.
   """
+  @github_agent_guidance_message "You have access to a working gh cli! use that, it should be enough. Stay strictly within the configured GitHub project and allowed repositories for this run."
   @github_agent_input_schema %{
     "type" => "object",
     "additionalProperties" => false,
@@ -60,11 +64,12 @@ defmodule SymphonyElixir.GitHub.DynamicTool do
 
   defp execute_github_agent(arguments) do
     with {:ok, request} <- normalize_github_agent_arguments(arguments) do
-      success_response(%{
-        "tool" => @github_agent_tool,
-        "accepted" => true,
-        "request" => request,
-        "message" => "github_agent dummy tool accepted the request. Real GitHub execution is not implemented yet."
+      failure_response(%{
+        "error" => %{
+          "tool" => @github_agent_tool,
+          "request" => request,
+          "message" => @github_agent_guidance_message
+        }
       })
     else
       {:error, reason} ->
@@ -86,18 +91,6 @@ defmodule SymphonyElixir.GitHub.DynamicTool do
   end
 
   defp normalize_github_agent_arguments(_arguments), do: {:error, :invalid_arguments}
-
-  defp success_response(payload) do
-    %{
-      "success" => true,
-      "contentItems" => [
-        %{
-          "type" => "inputText",
-          "text" => encode_payload(payload)
-        }
-      ]
-    }
-  end
 
   defp failure_response(payload) do
     %{

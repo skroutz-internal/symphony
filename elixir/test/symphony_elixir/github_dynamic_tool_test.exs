@@ -3,7 +3,7 @@ defmodule SymphonyElixir.GitHub.DynamicToolTest do
 
   alias SymphonyElixir.GitHub.DynamicTool
 
-  test "tool_specs advertises the github_agent input contract" do
+  test "tool_specs advertises the github_agent input contract and strict fallback guidance" do
     assert [
              %{
                "description" => description,
@@ -20,6 +20,9 @@ defmodule SymphonyElixir.GitHub.DynamicToolTest do
            ] = DynamicTool.tool_specs()
 
     assert description =~ "GitHub"
+    assert description =~ "gh"
+    assert description =~ "configured GitHub"
+    assert description =~ "allowed repositories"
   end
 
   test "unsupported tools return a failure payload with the supported tool list" do
@@ -44,10 +47,10 @@ defmodule SymphonyElixir.GitHub.DynamicToolTest do
     assert "github_agent" in supported_tools
   end
 
-  test "github_agent accepts a valid request string" do
+  test "github_agent fails closed and instructs the agent to use gh within scope" do
     response = DynamicTool.execute("github_agent", %{"request" => "open a PR and link the issue"})
 
-    assert response["success"] == true
+    assert response["success"] == false
 
     assert [
              %{
@@ -57,17 +60,18 @@ defmodule SymphonyElixir.GitHub.DynamicToolTest do
            ] = response["contentItems"]
 
     assert Jason.decode!(text) == %{
-             "accepted" => true,
-             "message" => "github_agent dummy tool accepted the request. Real GitHub execution is not implemented yet.",
-             "request" => "open a PR and link the issue",
-             "tool" => "github_agent"
+             "error" => %{
+               "message" => "You have access to a working gh cli! use that, it should be enough. Stay strictly within the configured GitHub project and allowed repositories for this run.",
+               "request" => "open a PR and link the issue",
+               "tool" => "github_agent"
+             }
            }
   end
 
-  test "github_agent trims request strings" do
+  test "github_agent trims request strings before returning the fallback guidance" do
     response = DynamicTool.execute("github_agent", %{"request" => "  check the repo status  "})
 
-    assert response["success"] == true
+    assert response["success"] == false
 
     assert [
              %{
@@ -75,7 +79,13 @@ defmodule SymphonyElixir.GitHub.DynamicToolTest do
              }
            ] = response["contentItems"]
 
-    assert Jason.decode!(text)["request"] == "check the repo status"
+    assert Jason.decode!(text) == %{
+             "error" => %{
+               "message" => "You have access to a working gh cli! use that, it should be enough. Stay strictly within the configured GitHub project and allowed repositories for this run.",
+               "request" => "check the repo status",
+               "tool" => "github_agent"
+             }
+           }
   end
 
   test "github_agent rejects missing request" do
