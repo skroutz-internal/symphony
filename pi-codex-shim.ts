@@ -362,7 +362,7 @@ function startPiProcess(cwd, sessionFile, socketPath) {
   const hasExtension = fs.existsSync(extensionPath);
   const agentEnv = loadAgentEnv(cwd);
 
-  const args = ["--mode", "rpc", "--session", sessionFile, "--no-skills"];
+  const args = ["--mode", "rpc", "--session", sessionFile, "--no-skills", "--skill", path.join(__dirname, "pi-skills/land")];
   if (hasExtension) {
     args.push("-e", extensionPath);
   } else {

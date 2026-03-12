@@ -1039,9 +1039,7 @@ defmodule SymphonyElixir.AppServerTest do
       }
 
       assert {:ok, _result} =
-               AppServer.run(workspace, "/print-tools", issue,
-                 on_message: fn message -> send(test_pid, {:app_server_message, message}) end
-               )
+               AppServer.run(workspace, "/print-tools", issue, on_message: fn message -> send(test_pid, {:app_server_message, message}) end)
 
       assert_receive {:app_server_message,
                       %{
@@ -1058,6 +1056,66 @@ defmodule SymphonyElixir.AppServerTest do
 
       assert "github_agent" in tool_names
       assert "push_to_symphony" in tool_names
+    after
+      File.rm_rf(test_root)
+    end
+  end
+
+  test "app server via shim lets pi push loaded skills back to symphony" do
+    test_root =
+      Path.join(
+        System.tmp_dir!(),
+        "symphony-elixir-app-server-shim-push-skills-#{System.unique_integer([:positive])}"
+      )
+
+    try do
+      workspace_root = Path.join(test_root, "workspaces")
+      workspace = Path.join(workspace_root, "MT-SHIM-SKILLS")
+      repo_root = Path.expand("../../..", __DIR__)
+      test_pid = self()
+
+      File.mkdir_p!(workspace)
+
+      write_workflow_file!(Workflow.workflow_file_path(),
+        tracker_kind: "github",
+        tracker_project_owner_type: "org",
+        tracker_project_owner: "acme",
+        tracker_project_number: 1,
+        tracker_project_repositories: ["owner/repo"],
+        tracker_api_token: "[REDACTED]",
+        workspace_root: workspace_root,
+        codex_command: "cd #{repo_root} && PI_BIN=#{repo_root}/pi-with-pts node ./pi-codex-shim.ts"
+      )
+
+      issue = %Issue{
+        id: "owner/repo#1:PVTI_1",
+        identifier: "owner/repo#1",
+        title: "Shim skill visibility",
+        description: "Ensure pi can push its loaded skills back to Symphony through the shim",
+        state: "Todo",
+        url: "https://github.com/owner/repo/issues/1",
+        labels: ["backend"]
+      }
+
+      assert {:ok, _result} =
+               AppServer.run(workspace, "/print-skills", issue,
+                 on_message: fn message -> send(test_pid, {:app_server_message, message}) end
+               )
+
+      assert_receive {:app_server_message,
+                      %{
+                        event: :tool_call_completed,
+                        payload: %{
+                          "params" => %{
+                            "name" => "push_to_symphony",
+                            "arguments" => %{"skills" => skills}
+                          }
+                        }
+                      }}
+
+      skill_names = Enum.map(skills, & &1["name"])
+
+      assert "skill:land" in skill_names
     after
       File.rm_rf(test_root)
     end

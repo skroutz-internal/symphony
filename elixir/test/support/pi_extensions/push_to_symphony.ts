@@ -7,9 +7,11 @@
  * - exercise the same shim tool-call path that normal dynamic tools use,
  *   without depending on LLM behavior
  *
- * Current command:
+ * Current commands:
  * - `/print-tools` collects `pi.getAllTools()` and sends that payload to Symphony
  *   via the registered `push_to_symphony` tool
+ * - `/print-skills` collects skill entries from `pi.getCommands()` and sends that
+ *   payload to Symphony via the registered `push_to_symphony` tool
  *
  * Why this exists:
  * - we want an end-to-end test with actual pi, not a mocked extension registry
@@ -23,7 +25,7 @@
  * Notes:
  * - this is intentionally a test mechanism, not product behavior
  * - `push_to_symphony` is a generic test/control hook to communicate with Symphony
- * - `/print-tools` is only one current use of that channel
+ * - `/print-tools` and `/print-skills` are two current uses of that channel
  */
 import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
 
@@ -37,7 +39,7 @@ declare global {
 }
 
 /**
- * Registers `/print-tools`.
+ * Registers `/print-tools` and `/print-skills`.
  */
 export default function printToolsExtension(pi: ExtensionAPI) {
   pi.registerCommand("print-tools", {
@@ -64,6 +66,31 @@ export default function printToolsExtension(pi: ExtensionAPI) {
       }
 
       const payload = { tools };
+      const result = await client.callTool("push_to_symphony", payload);
+      return JSON.stringify(result, null, 2);
+    },
+  });
+
+  pi.registerCommand("print-skills", {
+    description: "Push all loaded skills to Symphony",
+    handler: async () => {
+      const client = globalThis.__PI_SHIM_CLIENT__;
+      if (!client) {
+        throw new Error("PI shim client is not available");
+      }
+
+      await client.ready;
+
+      const skills = pi
+        .getCommands()
+        .filter((cmd) => cmd.source === "skill")
+        .map((cmd) => ({
+          name: cmd.name,
+          description: cmd.description,
+          path: cmd.path,
+        }));
+
+      const payload = { skills };
       const result = await client.callTool("push_to_symphony", payload);
       return JSON.stringify(result, null, 2);
     },
