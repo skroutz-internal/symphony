@@ -286,6 +286,10 @@ function formatToolActivity(toolName, args) {
   return `[${toolName}: ${trunc(JSON.stringify(args))}]`;
 }
 
+function createAgentIdentity() {
+  return `symphony(${crypto.randomBytes(4).toString("hex")})`;
+}
+
 function piSessionPath(cwd) {
   const logsDir = logsDirForWorkspace(cwd);
   const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
@@ -446,6 +450,7 @@ function startPiProcess(cwd, sessionFile, socketPath) {
   const extensionPath = path.join(__dirname, ".pi", "extensions", "shim-extention.ts");
   const hasExtension = fs.existsSync(extensionPath);
   const agentEnv = loadAgentEnv(cwd);
+  const agentIdentity = createAgentIdentity();
 
   const args = ["--mode", "rpc", "--session", sessionFile, "--no-skills", "--skill", path.join(__dirname, "pi-skills/land")];
   if (hasExtension) {
@@ -460,11 +465,11 @@ function startPiProcess(cwd, sessionFile, socketPath) {
 
   piProcess = spawn(piPath, args, {
     cwd,
-    env: { ...process.env, ...agentEnv, PI_SHIM_SOCKET: socketPath },
+    env: { ...process.env, ...agentEnv, PI_SHIM_SOCKET: socketPath, SYMPHONY_AGENT_IDENTITY: agentIdentity },
     stdio: ["pipe", "pipe", "pipe"],
   });
 
-  log({ _shim: "pi_spawned", pid: piProcess.pid, command: spawnCommand, cwd });
+  log({ _shim: "pi_spawned", pid: piProcess.pid, command: spawnCommand, cwd, agentIdentity });
 
   piProcess.stderr.on("data", (d) => {
     const text = d.toString().trim();
