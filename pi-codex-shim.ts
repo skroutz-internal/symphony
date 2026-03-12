@@ -330,6 +330,40 @@ function loadAgentEnv(cwd) {
 
 // ── pi RPC event handler ───────────────────────────────────────────────────
 
+function shouldLogPiEvent(msg) {
+  if (!msg || typeof msg !== "object") return true;
+
+  if (typeof msg.type === "string" && msg.type.endsWith("_delta")) {
+    return false;
+  }
+
+  if (msg.type === "message_update") {
+    const updateType = msg.assistantMessageEvent && msg.assistantMessageEvent.type;
+    if (typeof updateType === "string") {
+      if (updateType.endsWith("_delta")) {
+        return false;
+      }
+      if (updateType === "toolcall_start" || updateType === "toolcall_end" || updateType === "text_start" || updateType === "text_end") {
+        return false;
+      }
+    }
+  }
+
+  if (msg.type === "message_start" || msg.type === "message_end") {
+    return false;
+  }
+
+  if (msg.type === "turn_start" || msg.type === "turn_end") {
+    return false;
+  }
+
+  if (msg.type === "tool_execution_update") {
+    return false;
+  }
+
+  return true;
+}
+
 function handlePiLine(line) {
   if (!line.trim()) return;
   let msg;
@@ -339,7 +373,9 @@ function handlePiLine(line) {
     return;
   }
 
-  log({ _shim: "pi_rpc", direction: "from_pi", event: msg });
+  if (shouldLogPiEvent(msg)) {
+    log({ _shim: "pi_rpc", direction: "from_pi", event: msg });
+  }
 
   const t = msg.type;
 
