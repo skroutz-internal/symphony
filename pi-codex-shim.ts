@@ -117,6 +117,9 @@ let socketClose = null;
 // Shim diagnostics log for the current session
 let shimLog = null;
 
+// Human-readable activity log for the current session
+let activityLog = null;
+
 function createControlSocket() {
   const socketPath = path.join(os.tmpdir(), `pi-shim-${process.pid}-${Date.now()}.sock`);
   try { fs.unlinkSync(socketPath); } catch (_) {}
@@ -249,6 +252,40 @@ function openShimLog(cwd) {
   return stream;
 }
 
+function openActivityLog(cwd) {
+  const logsDir = logsDirForWorkspace(cwd);
+  const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
+  const logFile = path.join(logsDir, `activity-${timestamp}.log`);
+  const stream = fs.createWriteStream(logFile, { flags: "a" });
+  log(`activity log: ${logFile}`);
+  return stream;
+}
+
+function activity(line) {
+  if (activityLog) activityLog.write("• " + line + "\n");
+}
+
+const ACTIVITY_TRUNCATE = 120;
+
+function trunc(s) {
+  const flat = String(s).replace(/\s+/g, " ");
+  return flat.length > ACTIVITY_TRUNCATE ? flat.slice(0, ACTIVITY_TRUNCATE) + "…" : flat;
+}
+
+function formatToolActivity(toolName, args) {
+  if (toolName === "bash") {
+    return `[bash: ${trunc(args.command || "")}]`;
+  }
+  if (toolName === "read") {
+    const p = args.path || "";
+    const start = args.offset || 1;
+    const end = args.limit ? start + args.limit - 1 : "?";
+    const range = (args.offset || args.limit) ? `:${start}-${end}` : "";
+    return `[read: ${p}${range}]`;
+  }
+  return `[${toolName}: ${trunc(JSON.stringify(args))}]`;
+}
+
 function piSessionPath(cwd) {
   const logsDir = logsDirForWorkspace(cwd);
   const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
@@ -305,6 +342,18 @@ function handlePiLine(line) {
   log({ _shim: "pi_rpc", direction: "from_pi", event: msg });
 
   const t = msg.type;
+
+  if (t === "tool_execution_start") {
+    activity(formatToolActivity(msg.toolName, msg.args || {}));
+  }
+
+  if (t === "message_end" && msg.message && msg.message.role === "assistant") {
+    const text = (msg.message.content || [])
+      .filter((c) => c.type === "text")
+      .map((c) => c.text)
+      .join(" ");
+    if (text.trim()) activity(`assistant: ${trunc(text)}`);
+  }
 
   if (t === "agent_end") {
     completeCurrentTurn("pi agent_end");
@@ -423,6 +472,7 @@ function runTurn(prompt) {
     currentTurnResolve = resolve;
     currentTurnReject = reject;
     log({ _shim: "prompt_sent", message: prompt });
+    activity(`user: ${trunc(prompt)}`);
     sendToPi({ type: "prompt", message: prompt });
   });
 }
@@ -473,6 +523,7 @@ rl.on("line", async (line) => {
 
     const cwd = threadCwd || process.cwd();
     shimLog = openShimLog(cwd);
+    activityLog = openActivityLog(cwd);
     const sessionFile = piSessionPath(cwd);
 
     const { socketPath, close } = createControlSocket();
