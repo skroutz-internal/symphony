@@ -255,6 +255,42 @@ function piSessionPath(cwd) {
   return path.join(logsDir, `pi-session-${timestamp}.jsonl`);
 }
 
+function parseAgentEnvValue(rawValue) {
+  const trimmed = rawValue.trim();
+  if (trimmed.length >= 2) {
+    const first = trimmed[0];
+    const last = trimmed[trimmed.length - 1];
+    if ((first === '"' && last === '"') || (first === "'" && last === "'")) {
+      return trimmed.slice(1, -1);
+    }
+  }
+  return trimmed;
+}
+
+function loadAgentEnv(cwd) {
+  const envPath = path.join(cwd, ".agent-env");
+  if (!fs.existsSync(envPath)) {
+    return {};
+  }
+
+  const content = fs.readFileSync(envPath, "utf8");
+  const env = {};
+
+  for (const line of content.split(/\r?\n/)) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith("#")) continue;
+
+    const match = trimmed.match(/^(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)=(.*)$/);
+    if (!match) continue;
+
+    const [, key, rawValue] = match;
+    env[key] = parseAgentEnvValue(rawValue);
+  }
+
+  log({ _shim: "agent_env_loaded", path: envPath, keys: Object.keys(env).sort() });
+  return env;
+}
+
 // ── pi RPC event handler ───────────────────────────────────────────────────
 
 function handlePiLine(line) {
@@ -324,6 +360,7 @@ function startPiProcess(cwd, sessionFile, socketPath) {
   const piPath = process.env.PI_BIN || "pi";
   const extensionPath = path.join(__dirname, ".pi", "extensions", "shim-extention.ts");
   const hasExtension = fs.existsSync(extensionPath);
+  const agentEnv = loadAgentEnv(cwd);
 
   const args = ["--mode", "rpc", "--session", sessionFile, "--no-skills"];
   if (hasExtension) {
@@ -338,7 +375,7 @@ function startPiProcess(cwd, sessionFile, socketPath) {
 
   piProcess = spawn(piPath, args, {
     cwd,
-    env: { ...process.env, PI_SHIM_SOCKET: socketPath },
+    env: { ...process.env, ...agentEnv, PI_SHIM_SOCKET: socketPath },
     stdio: ["pipe", "pipe", "pipe"],
   });
 

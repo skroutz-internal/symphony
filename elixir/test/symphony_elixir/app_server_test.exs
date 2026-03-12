@@ -946,6 +946,62 @@ defmodule SymphonyElixir.AppServerTest do
     end
   end
 
+  test "pi shim loads .agent-env and appends it to pi process env" do
+    test_root =
+      Path.join(
+        System.tmp_dir!(),
+        "symphony-elixir-app-server-shim-agent-env-#{System.unique_integer([:positive])}"
+      )
+
+    try do
+      workspace_root = Path.join(test_root, "workspaces")
+      workspace = Path.join(workspace_root, "MT-SHIM-ENV")
+      repo_root = Path.expand("../../..", __DIR__)
+      fake_pi = Path.join(test_root, "fake-pi")
+      env_file = Path.join(test_root, "pi-env.txt")
+
+      File.mkdir_p!(workspace)
+      File.write!(Path.join(workspace, ".agent-env"), "FOO=alpha\nexport BAR=\"two words\"\n")
+
+      File.write!(fake_pi, """
+      #!/bin/sh
+      printf 'FOO=%s\n' "$FOO" > "#{env_file}"
+      printf 'BAR=%s\n' "$BAR" >> "#{env_file}"
+      printf 'PI_SHIM_SOCKET=%s\n' "$PI_SHIM_SOCKET" >> "#{env_file}"
+      while IFS= read -r _line; do
+        printf '%s\n' '{"type":"agent_end"}'
+        exit 0
+      done
+      """)
+
+      File.chmod!(fake_pi, 0o755)
+
+      write_workflow_file!(Workflow.workflow_file_path(),
+        workspace_root: workspace_root,
+        codex_command: "cd #{repo_root} && PI_BIN=#{fake_pi} node ./pi-codex-shim.ts"
+      )
+
+      issue = %Issue{
+        id: "issue-shim-env",
+        identifier: "MT-SHIM-ENV",
+        title: "Shim .agent-env support",
+        description: "Ensure .agent-env values reach pi",
+        state: "In Progress",
+        url: "https://example.org/issues/MT-SHIM-ENV",
+        labels: ["backend"]
+      }
+
+      assert {:ok, _result} = AppServer.run(workspace, "Verify shim .agent-env", issue)
+
+      env_output = File.read!(env_file)
+      assert env_output =~ "FOO=alpha\n"
+      assert env_output =~ "BAR=two words\n"
+      assert env_output =~ "PI_SHIM_SOCKET="
+    after
+      File.rm_rf(test_root)
+    end
+  end
+
   test "app server via shim lets pi push registered tools back to symphony" do
     test_root =
       Path.join(
