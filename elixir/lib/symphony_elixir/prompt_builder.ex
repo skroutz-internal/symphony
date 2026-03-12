@@ -18,11 +18,25 @@ defmodule SymphonyElixir.PromptBuilder do
     |> Solid.render!(
       %{
         "attempt" => Keyword.get(opts, :attempt),
-        "issue" => issue |> Map.from_struct() |> to_solid_map()
+        "issue" => issue |> Map.from_struct() |> to_solid_map(),
+        "tracker" => tracker_context()
       },
       @render_opts
     )
     |> IO.iodata_to_binary()
+  end
+
+  defp tracker_context do
+    case Config.settings() do
+      {:ok, %{tracker: tracker}} ->
+        tracker
+        |> Map.from_struct()
+        |> Map.drop([:api_key])
+        |> to_solid_map()
+
+      _ ->
+        %{}
+    end
   end
 
   defp prompt_template!({:ok, %{prompt_template: prompt}}), do: default_prompt(prompt)
