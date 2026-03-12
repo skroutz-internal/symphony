@@ -308,8 +308,7 @@ function parseAgentEnvValue(rawValue) {
   return trimmed;
 }
 
-function loadAgentEnv(cwd) {
-  const envPath = path.join(cwd, ".agent-env");
+function loadEnvFile(envPath) {
   if (!fs.existsSync(envPath)) {
     return {};
   }
@@ -328,8 +327,16 @@ function loadAgentEnv(cwd) {
     env[key] = parseAgentEnvValue(rawValue);
   }
 
-  log({ _shim: "agent_env_loaded", path: envPath, keys: Object.keys(env).sort() });
+  log({ _shim: "env_file_loaded", path: envPath, keys: Object.keys(env).sort() });
   return env;
+}
+
+function loadAgentEnv(cwd) {
+  return loadEnvFile(path.join(cwd, ".agent-env"));
+}
+
+function loadShimEnv(cwd) {
+  return loadEnvFile(path.join(cwd, ".shim-env"));
 }
 
 // ── pi RPC event handler ───────────────────────────────────────────────────
@@ -450,13 +457,14 @@ function startPiProcess(cwd, sessionFile, socketPath) {
   const extensionPath = path.join(__dirname, ".pi", "extensions", "shim-extention.ts");
   const hasExtension = fs.existsSync(extensionPath);
   const agentEnv = loadAgentEnv(cwd);
+  const shimEnv = loadShimEnv(cwd);
   const agentIdentity = createAgentIdentity();
 
-  const args = ["--mode", "rpc", "--session", sessionFile, "--no-skills", "--skill", path.join(__dirname, "pi-skills/land")];
+  const args = ["--mode", "rpc", "--session", sessionFile, "--no-skills", "--skill", path.join(__dirname, "pi-skills/land"), "--no-extensions"];
+  if (shimEnv.MODEL) args.splice(2, 0, "--model", shimEnv.MODEL);
   if (hasExtension) {
     args.push("-e", extensionPath);
   } else {
-    args.push("--no-extensions");
     log(`extension not found: ${extensionPath}`);
   }
 
@@ -465,7 +473,12 @@ function startPiProcess(cwd, sessionFile, socketPath) {
 
   piProcess = spawn(piPath, args, {
     cwd,
-    env: { ...process.env, ...agentEnv, PI_SHIM_SOCKET: socketPath, SYMPHONY_AGENT_IDENTITY: agentIdentity },
+    env: {
+      ...process.env,
+      ...agentEnv,
+      PI_SHIM_SOCKET: socketPath,
+      SYMPHONY_AGENT_IDENTITY: agentIdentity,
+    },
     stdio: ["pipe", "pipe", "pipe"],
   });
 
