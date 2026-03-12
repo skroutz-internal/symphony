@@ -30,7 +30,6 @@ defmodule SymphonyElixir.StatusDashboard do
   @ansi_bold IO.ANSI.bright()
   @ansi_blue IO.ANSI.blue()
   @ansi_cyan IO.ANSI.cyan()
-  @ansi_dim IO.ANSI.faint()
   @ansi_green IO.ANSI.green()
   @ansi_red IO.ANSI.red()
   @ansi_orange IO.ANSI.yellow()
@@ -576,7 +575,7 @@ defmodule SymphonyElixir.StatusDashboard do
   defp format_running_rows(running, running_event_width) do
     if running == [] do
       [
-        "│  " <> colorize("No active agents", @ansi_gray),
+        "│  " <> colorize("No active agents", @ansi_bold),
         "│"
       ]
     else
@@ -647,7 +646,7 @@ defmodule SymphonyElixir.StatusDashboard do
 
   defp format_retry_rows(retrying) do
     if retrying == [] do
-      ["│  " <> colorize("No queued retries", @ansi_gray)]
+      ["│  " <> colorize("No queued retries", @ansi_bold)]
     else
       retrying
       |> Enum.sort_by(& &1.due_in_ms)
@@ -667,7 +666,7 @@ defmodule SymphonyElixir.StatusDashboard do
       colorize("#{identifier}", @ansi_red) <>
       " " <>
       colorize("attempt=#{attempt}", @ansi_yellow) <>
-      colorize(" in ", @ansi_dim) <>
+      colorize(" in ", @ansi_bold) <>
       colorize(next_in_words(due_in_ms), @ansi_cyan) <>
       error
   end
@@ -695,7 +694,7 @@ defmodule SymphonyElixir.StatusDashboard do
     if sanitized == "" do
       ""
     else
-      " " <> colorize("error=#{truncate(sanitized, 96)}", @ansi_dim)
+      " " <> colorize("error=#{truncate(sanitized, 96)}", @ansi_bold)
     end
   end
 
@@ -749,7 +748,7 @@ defmodule SymphonyElixir.StatusDashboard do
       ]
       |> Enum.join(" ")
 
-    "│   " <> colorize(header, @ansi_gray)
+    "│   " <> colorize(header, @ansi_bold)
   end
 
   defp running_table_separator_row(running_event_width) do
@@ -762,7 +761,7 @@ defmodule SymphonyElixir.StatusDashboard do
         @running_session_width +
         running_event_width + 6
 
-    "│   " <> colorize(String.duplicate("─", separator_width), @ansi_gray)
+    "│   " <> colorize(String.duplicate("─", separator_width), @ansi_bold)
   end
 
   defp running_event_width(terminal_columns) do
