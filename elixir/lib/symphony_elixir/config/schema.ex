@@ -416,9 +416,26 @@ defmodule SymphonyElixir.Config.Schema do
   defp resolve_secret_setting(nil, fallback), do: normalize_secret_value(fallback)
 
   defp resolve_secret_setting(value, fallback) when is_binary(value) do
-    case resolve_env_value(value, fallback) do
-      resolved when is_binary(resolved) -> normalize_secret_value(resolved)
-      resolved -> resolved
+    case value do
+      "!" <> command ->
+        command
+        |> String.trim()
+        |> run_secret_command()
+
+      _ ->
+        case resolve_env_value(value, fallback) do
+          resolved when is_binary(resolved) -> normalize_secret_value(resolved)
+          resolved -> resolved
+        end
+    end
+  end
+
+  defp run_secret_command(""), do: nil
+
+  defp run_secret_command(command) when is_binary(command) do
+    case System.cmd("sh", ["-lc", "(" <> command <> ") 2>/dev/null"]) do
+      {output, 0} -> normalize_secret_value(String.trim(output))
+      {_output, _status} -> nil
     end
   end
 

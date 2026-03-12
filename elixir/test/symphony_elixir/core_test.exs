@@ -133,6 +133,17 @@ defmodule SymphonyElixir.CoreTest do
     assert :ok = Config.validate!()
   end
 
+  test "tracker api token resolves from a shell command prefixed with !" do
+    write_workflow_file!(Workflow.workflow_file_path(),
+      tracker_api_token: "!printf 'command-token\\n'",
+      tracker_project_slug: "project",
+      codex_command: "/bin/sh app-server"
+    )
+
+    assert Config.settings!().tracker.api_key == "command-token"
+    assert :ok = Config.validate!()
+  end
+
   test "linear assignee resolves from LINEAR_ASSIGNEE env var" do
     previous_linear_assignee = System.get_env("LINEAR_ASSIGNEE")
     env_assignee = "dev@example.com"
