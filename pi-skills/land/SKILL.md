@@ -81,6 +81,25 @@ python3 "$SKILL_DIR/pr_watch.py"
 # Squash-merge when green (remote branch auto-deletes on merge)
 # Do NOT pass --repo; gh resolves the repo from the current directory.
 gh pr merge "$pr_number" --squash --subject "$pr_title" --body "$pr_body"
+
+# Move the project item to Done after merge
+# Resolve IDs first; guard against empty PROJECT_ID (transient API failures).
+OWNER="<owner>"; PROJECT_NUMBER="<number>"; STATUS="Done"
+PROJECT_ID=$(gh project list --owner "$OWNER" --format json \
+  --jq ".projects[] | select(.number == $PROJECT_NUMBER) | .id")
+if [ -z "$PROJECT_ID" ]; then
+  echo "ERROR: could not resolve project ID — retry or set manually" >&2
+  exit 1
+fi
+ITEM_URL="$(gh pr view --json url -q .url)"   # PR URL links to the project item
+ITEM_ID=$(gh project item-list "$PROJECT_NUMBER" --owner "$OWNER" --format json \
+  --jq ".items[] | select(.content.url == \"$ITEM_URL\") | .id")
+STATUS_FIELD_ID=$(gh project field-list "$PROJECT_NUMBER" --owner "$OWNER" --format json \
+  --jq '.fields[] | select(.name == "Status") | .id')
+OPTION_ID=$(gh project field-list "$PROJECT_NUMBER" --owner "$OWNER" --format json \
+  --jq ".fields[] | select(.name == \"Status\") | .options[] | select(.name == \"$STATUS\") | .id")
+gh project item-edit --id "$ITEM_ID" --project-id "$PROJECT_ID" \
+  --field-id "$STATUS_FIELD_ID" --single-select-option-id "$OPTION_ID"
 ```
 
 ## Failure Handling
