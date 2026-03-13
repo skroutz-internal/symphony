@@ -31,8 +31,16 @@ class RateLimitError(RuntimeError):
     pass
 
 
+class NotFoundError(RuntimeError):
+    pass
+
+
 def is_rate_limit_error(error: str) -> bool:
     return "HTTP 429" in error or "rate limit" in error.lower()
+
+
+def is_not_found_error(error: str) -> bool:
+    return "HTTP 404" in error or "Not Found" in error
 
 
 async def run_gh(*args: str) -> str:
@@ -50,6 +58,8 @@ async def run_gh(*args: str) -> str:
         if proc.returncode == 0:
             return stdout.decode()
         error = stderr.decode().strip() or "gh command failed"
+        if is_not_found_error(error):
+            raise NotFoundError(error)
         if not is_rate_limit_error(error):
             raise RuntimeError(error)
         last_error = error
@@ -82,16 +92,19 @@ async def get_paginated_list(endpoint: str) -> list[dict[str, Any]]:
     page = 1
     items: list[dict[str, Any]] = []
     while True:
-        data = await run_gh(
-            "api",
-            "--method",
-            "GET",
-            endpoint,
-            "-f",
-            "per_page=100",
-            "-f",
-            f"page={page}",
-        )
+        try:
+            data = await run_gh(
+                "api",
+                "--method",
+                "GET",
+                endpoint,
+                "-f",
+                "per_page=100",
+                "-f",
+                f"page={page}",
+            )
+        except NotFoundError:
+            return items
         batch = json.loads(data)
         if not batch:
             break
