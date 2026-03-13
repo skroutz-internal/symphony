@@ -79,6 +79,7 @@ python3 "$SKILL_DIR/pr_watch.py"
 # Exit 5 = conflicts, resolve and push
 
 # Squash-merge when green (remote branch auto-deletes on merge)
+# Do NOT pass --repo; gh resolves the repo from the current directory.
 gh pr merge "$pr_number" --squash --subject "$pr_title" --body "$pr_body"
 ```
 
