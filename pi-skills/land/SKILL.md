@@ -7,9 +7,10 @@ description: Monitor and land a PR. Use when the issue is in Human Review (poll 
 
 ## Human Review
 
-When the issue is in `Human Review`, run `pr_watch.py`. It blocks until feedback arrives. Do not poll manually.
+When the issue is in `Human Review`, run `pr_watch.py`. It blocks until a human approves the PR and CI passes (or no CI is configured). Do not poll manually, do not proceed to `Merging` without an approval.
 
-On exit 2 (review feedback detected): move the item to `Rework` and address the feedback.
+On exit 2 (blocking review or comments detected): move the item to `Rework` and address the feedback.
+On exit 0 (approved + CI green): move the item to `Merging` and follow the Merging flow below.
 
 ## Merging
 

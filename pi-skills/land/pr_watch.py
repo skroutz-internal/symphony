@@ -326,13 +326,22 @@ def raise_on_human_feedback(
         raise _WatchExit(2)
 
 
+def has_approval(reviews: list[dict[str, Any]]) -> bool:
+    return any(
+        not is_bot_user(r.get("user", {})) and r.get("state") == "APPROVED"
+        for r in dedupe_reviews(reviews)
+    )
+
+
 async def wait_for_feedback(pr_number: int, checks_done: asyncio.Event) -> None:
     print("Waiting for review feedback...", flush=True)
     while True:
         issue_comments, review_comments, reviews = await fetch_review_context(pr_number)
         raise_on_human_feedback(issue_comments, review_comments, reviews)
-        if checks_done.is_set():
-            return
+        if has_approval(reviews):
+            print("PR approved.")
+            if checks_done.is_set():
+                return
         await asyncio.sleep(POLL_SECONDS)
 
 
