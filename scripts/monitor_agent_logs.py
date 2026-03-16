@@ -103,16 +103,20 @@ def main() -> int:
 
     while True:
         for ws in workspace_dirs(root):
-            if ws.name in monitors:
-                continue
             logs_dir = root / "_logs" / ws.name
             log = latest_activity_log(logs_dir)
             if not log:
                 continue
-            follower = FileFollower(log, from_start=not args.tail)
-            monitor = WorkspaceMonitor(ws.name, follower, use_color)
-            monitors[ws.name] = monitor
-            print(f"{monitor.label} tracking {log.name}")
+            if ws.name not in monitors:
+                follower = FileFollower(log, from_start=not args.tail)
+                monitor = WorkspaceMonitor(ws.name, follower, use_color)
+                monitors[ws.name] = monitor
+                print(f"{monitor.label} tracking {log.name}")
+            else:
+                monitor = monitors[ws.name]
+                if monitor.follower.path != log:
+                    monitor.follower = FileFollower(log, from_start=False)
+                    print(f"{monitor.label} switching to {log.name}")
 
         for monitor in monitors.values():
             monitor.process_lines()
