@@ -1791,4 +1791,157 @@ defmodule SymphonyElixir.AppServerTest do
       File.rm_rf(test_root)
     end
   end
+
+  test "app server emits malformed events for JSON-like protocol lines that fail to decode" do
+    test_root =
+      Path.join(
+        System.tmp_dir!(),
+        "symphony-elixir-app-server-malformed-protocol-#{System.unique_integer([:positive])}"
+      )
+
+    try do
+      workspace_root = Path.join(test_root, "workspaces")
+      workspace = Path.join(workspace_root, "MT-93")
+      codex_binary = Path.join(test_root, "fake-codex")
+      File.mkdir_p!(workspace)
+
+      File.write!(codex_binary, """
+      #!/bin/sh
+      count=0
+      while IFS= read -r line; do
+        count=$((count + 1))
+
+        case "$count" in
+          1)
+            printf '%s\n' '{"id":1,"result":{}}'
+            ;;
+          2)
+            printf '%s\n' '{"id":2,"result":{"thread":{"id":"thread-93"}}}'
+            ;;
+          3)
+            printf '%s\n' '{"id":3,"result":{"turn":{"id":"turn-93"}}}'
+            ;;
+          4)
+            printf '%s\n' '{"method":"turn/completed"'
+            printf '%s\n' '{"method":"turn/completed"}'
+            exit 0
+            ;;
+          *)
+            exit 0
+            ;;
+        esac
+      done
+      """)
+
+      File.chmod!(codex_binary, 0o755)
+
+      write_workflow_file!(Workflow.workflow_file_path(),
+        workspace_root: workspace_root,
+        codex_command: "#{codex_binary} app-server"
+      )
+
+      issue = %Issue{
+        id: "issue-malformed-protocol",
+        identifier: "MT-93",
+        title: "Malformed protocol frame",
+        description: "Ensure malformed JSON-like frames are surfaced to the orchestrator",
+        state: "In Progress",
+        url: "https://example.org/issues/MT-93",
+        labels: ["backend"]
+      }
+
+      test_pid = self()
+      on_message = fn message -> send(test_pid, {:app_server_message, message}) end
+
+      assert {:ok, _result} =
+               AppServer.run(workspace, "Capture malformed protocol line", issue, on_message: on_message)
+
+      assert_received {:app_server_message, %{event: :malformed, payload: "{\"method\":\"turn/completed\""}}
+      assert_received {:app_server_message, %{event: :turn_completed}}
+    after
+      File.rm_rf(test_root)
+    end
+  end
+
+  test "pi shim forwards token usage from agent_end in turn/completed" do
+    test_root =
+      Path.join(
+        System.tmp_dir!(),
+        "symphony-elixir-app-server-shim-token-usage-#{System.unique_integer([:positive])}"
+      )
+
+    try do
+      workspace_root = Path.join(test_root, "workspaces")
+      workspace = Path.join(workspace_root, "MT-USAGE")
+      repo_root = Path.expand("../../..", __DIR__)
+      fake_pi = Path.join(test_root, "fake-pi")
+
+      File.mkdir_p!(workspace)
+
+      agent_end =
+        Jason.encode!(%{
+          "type" => "agent_end",
+          "messages" => [
+            %{
+              "role" => "user",
+              "content" => [%{"type" => "text", "text" => "do the thing"}]
+            },
+            %{
+              "role" => "assistant",
+              "content" => [%{"type" => "text", "text" => "done"}],
+              "usage" => %{
+                "input" => 1234,
+                "output" => 567,
+                "cacheRead" => 256,
+                "cacheWrite" => 0,
+                "totalTokens" => 2057,
+                "cost" => %{"input" => 0.002, "output" => 0.008, "cacheRead" => 0.0001, "cacheWrite" => 0, "total" => 0.0101}
+              }
+            }
+          ]
+        })
+
+      File.write!(fake_pi, """
+      #!/bin/sh
+      while IFS= read -r _line; do
+        printf '%s\\n' '#{agent_end}'
+        exit 0
+      done
+      """)
+
+      File.chmod!(fake_pi, 0o755)
+
+      write_workflow_file!(Workflow.workflow_file_path(),
+        workspace_root: workspace_root,
+        codex_command: "cd #{repo_root} && PI_BIN=#{fake_pi} node ./pi-codex-shim.ts"
+      )
+
+      issue = %Issue{
+        id: "issue-token-usage",
+        identifier: "MT-USAGE",
+        title: "Token usage forwarding",
+        description: "Ensure pi shim forwards token usage from agent_end to Symphony",
+        state: "In Progress",
+        url: "https://example.org/issues/MT-USAGE",
+        labels: ["backend"]
+      }
+
+      test_pid = self()
+
+      assert {:ok, _result} =
+               AppServer.run(workspace, "Verify token usage", issue,
+                 on_message: fn msg -> send(test_pid, {:app_server_message, msg}) end
+               )
+
+      assert_receive {:app_server_message, %{event: :turn_completed, payload: payload}}, 10_000
+
+      usage = Map.get(payload, "usage")
+      assert is_map(usage), "expected usage map in turn/completed payload, got: #{inspect(payload)}"
+      assert usage["input"] == 1234
+      assert usage["output"] == 567
+      assert usage["totalTokens"] == 2057
+    after
+      File.rm_rf(test_root)
+    end
+  end
 end

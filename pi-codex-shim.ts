@@ -93,14 +93,30 @@ let piProcess = null;
 let currentTurnResolve = null;
 let currentTurnReject = null;
 
-function completeCurrentTurn(source) {
+// Token usage accumulated from pi's agent_end event for the current turn
+let currentTurnUsage = null;
+
+function completeCurrentTurn(source, usage = null) {
   log(`${source} — turn complete`);
-  log({ _shim: "turn_complete", source });
+  log({ _shim: "turn_complete", source, usage });
   if (currentTurnResolve) {
-    currentTurnResolve();
+    currentTurnResolve(usage);
     currentTurnResolve = null;
     currentTurnReject = null;
+    currentTurnUsage = null;
   }
+}
+
+function extractUsageFromAgentEnd(msg) {
+  const messages = msg.messages || [];
+  // Walk backwards to find the last assistant message with non-zero usage
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const m = messages[i];
+    if (m.role === "assistant" && m.usage && m.usage.totalTokens > 0) {
+      return m.usage;
+    }
+  }
+  return null;
 }
 
 function rejectCurrentTurn(reason) {
@@ -108,6 +124,7 @@ function rejectCurrentTurn(reason) {
     currentTurnReject(new Error(reason));
     currentTurnResolve = null;
     currentTurnReject = null;
+    currentTurnUsage = null;
   }
 }
 
@@ -420,7 +437,8 @@ function handlePiLine(line) {
   }
 
   if (t === "agent_end") {
-    completeCurrentTurn("pi agent_end");
+    const usage = extractUsageFromAgentEnd(msg);
+    completeCurrentTurn("pi agent_end", usage);
     return;
   }
 
@@ -627,8 +645,11 @@ rl.on("line", async (line) => {
     send({ id, result: { turn: { id: "pi-turn-1" } } });
 
     try {
-      await runTurn(prompt);
-      send({ method: "turn/completed" });
+      const usage = await runTurn(prompt);
+      const completedMsg = { method: "turn/completed" };
+      if (usage) completedMsg.usage = usage;
+      log({ _shim: "turn_completed_usage", usage });
+      send(completedMsg);
     } catch (err) {
       log("turn failed: " + err.message);
       send({ method: "turn/failed", params: { reason: err.message } });
