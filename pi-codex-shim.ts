@@ -265,7 +265,7 @@ function activity(line) {
   if (activityLog) activityLog.write("• " + line + "\n");
 }
 
-const ACTIVITY_TRUNCATE = 120;
+const ACTIVITY_TRUNCATE = 300;
 
 function trunc(s) {
   const flat = String(s).replace(/\s+/g, " ");
@@ -392,6 +392,23 @@ function handlePiLine(line) {
 
   if (t === "tool_execution_start") {
     activity(formatToolActivity(msg.toolName, msg.args || {}));
+  }
+
+  if (t === "tool_execution_end") {
+    const result = msg.result;
+    if (result) {
+      const output = Array.isArray(result.content)
+        ? result.content.filter((c) => c.type === "text").map((c) => c.text).join(" ")
+        : String(result);
+      if (output.trim()) activity(`  result: ${trunc(output)}`);
+    }
+  }
+
+  if (t === "message_update") {
+    const ae = msg.assistantMessageEvent || {};
+    if (ae.type === "thinking_end" && ae.content && ae.content.trim()) {
+      activity(`  think: ${ae.content.trim()}`);
+    }
   }
 
   if (t === "message_end" && msg.message && msg.message.role === "assistant") {
