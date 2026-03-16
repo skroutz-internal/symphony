@@ -1324,7 +1324,7 @@ defmodule SymphonyElixir.WorkspaceAndConfigTest do
       assert trace =~ "echo before-remove"
       assert trace =~ "rm -rf"
       assert trace =~ workspace_path
-    after
+      assert trace =~ "export SYMPHONY_ISSUE_IDENTIFIER="    after
       File.rm_rf(test_root)
     end
   end

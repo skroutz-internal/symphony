@@ -323,7 +323,9 @@ defmodule SymphonyElixir.Workspace do
 
     Logger.info("Running workspace hook hook=#{hook_name} #{issue_log_context(issue_context)} workspace=#{workspace} worker_host=#{worker_host}")
 
-    case run_remote_command(worker_host, "cd #{shell_escape(workspace)} && #{command}", timeout_ms) do
+    env_exports = hook_env_export(issue_context)
+
+    case run_remote_command(worker_host, "#{env_exports}cd #{shell_escape(workspace)} && #{command}", timeout_ms) do
       {:ok, cmd_result} ->
         handle_hook_command_result(cmd_result, workspace, issue_context, hook_name)
 
@@ -368,6 +370,16 @@ defmodule SymphonyElixir.Workspace do
         if(is_nil(value), do: "", else: to_string(value))
       }
     end)
+  end
+
+  defp hook_env_export(issue_context) when is_map(issue_context) do
+    issue_context
+    |> hook_env()
+    |> Enum.map(fn {key, value} -> "export #{key}=#{shell_escape(value)}" end)
+    |> case do
+      [] -> ""
+      exports -> Enum.join(exports, "\n") <> "\n"
+    end
   end
 
   defp validate_workspace_path(workspace, nil) when is_binary(workspace) do
