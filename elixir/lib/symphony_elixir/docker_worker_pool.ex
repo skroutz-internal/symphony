@@ -46,13 +46,20 @@ defmodule SymphonyElixir.DockerWorkerPool do
             mode: String.t()
           }
 
-    @spec from_map(map()) :: {:ok, t()} | {:error, String.t()}
-    def from_map(%{"host" => host, "container" => container} = m)
+    @spec from_map(map(), String.t()) :: {:ok, t()} | {:error, String.t()}
+    def from_map(%{"host" => host, "container" => container} = m, workflow_dir)
         when is_binary(host) and is_binary(container) do
       mode = Map.get(m, "mode", "ro")
 
+      expanded =
+        cond do
+          String.starts_with?(host, "/") -> host
+          String.starts_with?(host, "~") -> Path.expand(host)
+          true -> Path.expand(Path.join(workflow_dir, host))
+        end
+
       if mode in ["ro", "rw"] do
-        {:ok, %__MODULE__{host: Path.expand(host), container: container, mode: mode}}
+        {:ok, %__MODULE__{host: expanded, container: container, mode: mode}}
       else
         {:error, "mount mode must be 'ro' or 'rw', got: #{inspect(mode)}"}
       end
@@ -78,10 +85,10 @@ defmodule SymphonyElixir.DockerWorkerPool do
             mounts: [Mount.t()]
           }
 
-    @spec from_workflow(map()) :: {:ok, t()} | {:error, String.t()} | :disabled
-    def from_workflow(%{"worker" => %{"docker" => docker}}) when is_map(docker) do
+    @spec from_workflow(map(), String.t()) :: {:ok, t()} | {:error, String.t()} | :disabled
+    def from_workflow(%{"worker" => %{"docker" => docker}}, workflow_dir) when is_map(docker) do
       with {:ok, image} <- required_string(docker, "image"),
-           {:ok, mounts} <- parse_mounts(Map.get(docker, "mounts", [])) do
+           {:ok, mounts} <- parse_mounts(Map.get(docker, "mounts", []), workflow_dir) do
         {:ok,
          %__MODULE__{
            image: image,
@@ -92,7 +99,7 @@ defmodule SymphonyElixir.DockerWorkerPool do
       end
     end
 
-    def from_workflow(_), do: :disabled
+    def from_workflow(_, _), do: :disabled
 
     defp required_string(map, key) do
       case Map.get(map, key) do
@@ -101,16 +108,16 @@ defmodule SymphonyElixir.DockerWorkerPool do
       end
     end
 
-    defp parse_mounts(list) when is_list(list) do
+    defp parse_mounts(list, workflow_dir) when is_list(list) do
       Enum.reduce_while(list, {:ok, []}, fn m, {:ok, acc} ->
-        case Mount.from_map(m) do
+        case Mount.from_map(m, workflow_dir) do
           {:ok, mount} -> {:cont, {:ok, acc ++ [mount]}}
           {:error, reason} -> {:halt, {:error, reason}}
         end
       end)
     end
 
-    defp parse_mounts(_), do: {:error, "worker.docker.mounts must be a list"}
+    defp parse_mounts(_, _), do: {:error, "worker.docker.mounts must be a list"}
   end
 
   # ---------------------------------------------------------------------------
@@ -234,7 +241,8 @@ defmodule SymphonyElixir.DockerWorkerPool do
   defp load_docker_config do
     case SymphonyElixir.Workflow.current() do
       {:ok, %{config: config}} when is_map(config) ->
-        DockerConfig.from_workflow(config)
+        workflow_dir = Path.dirname(SymphonyElixir.Workflow.workflow_file_path())
+        DockerConfig.from_workflow(config, workflow_dir)
 
       {:error, reason} ->
         {:error, "could not load workflow: #{inspect(reason)}"}
@@ -269,7 +277,7 @@ defmodule SymphonyElixir.DockerWorkerPool do
 
     config = """
     Host *
-      User root
+      User symphony
       IdentityFile #{key_path}
       IdentitiesOnly yes
       StrictHostKeyChecking no
