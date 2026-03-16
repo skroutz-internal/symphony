@@ -119,7 +119,7 @@ defmodule SymphonyElixir.DockerWorkerPool do
 
   defmodule State do
     @moduledoc false
-    defstruct container_ids: [], hosts: [], key_dir: nil
+    defstruct container_ids: [], hosts: [], key_dir: nil, port_to_name: %{}
   end
 
   @spec start_link(keyword()) :: GenServer.on_start()
@@ -130,6 +130,30 @@ defmodule SymphonyElixir.DockerWorkerPool do
   @spec container_ids() :: [String.t()]
   def container_ids do
     GenServer.call(__MODULE__, :container_ids)
+  end
+
+  @doc """
+  Restarts the container backing the given worker host (e.g. "localhost:2222").
+  Called by the agent runner after `after_run` completes to reset the container
+  for the next run — avoids needing `kill 1` inside the container.
+  """
+  @spec restart_worker(String.t()) :: :ok | {:error, term()}
+  def restart_worker(host) do
+    GenServer.call(__MODULE__, {:restart_worker, host})
+  end
+
+  @doc """
+  Like `restart_worker/1` but silently does nothing if the pool is not running
+  (non-Docker workflows). Safe to call unconditionally from `AgentRunner`.
+  """
+  @spec maybe_restart(String.t() | nil) :: :ok
+  def maybe_restart(nil), do: :ok
+
+  def maybe_restart(host) when is_binary(host) do
+    case GenServer.whereis(__MODULE__) do
+      nil -> :ok
+      _pid -> restart_worker(host)
+    end
   end
 
   @impl true
@@ -144,10 +168,10 @@ defmodule SymphonyElixir.DockerWorkerPool do
 
         with {:ok, key_dir, pubkey} <- generate_keypair(),
              :ok <- configure_ssh(key_dir),
-             {:ok, container_ids, hosts} <- spawn_workers(docker_config, pubkey) do
+             {:ok, container_ids, hosts, port_to_name} <- spawn_workers(docker_config, pubkey) do
           Config.set_dynamic_ssh_hosts(hosts)
           Logger.info("DockerWorkerPool: workers ready at #{inspect(hosts)}")
-          {:ok, %State{container_ids: container_ids, hosts: hosts, key_dir: key_dir}}
+          {:ok, %State{container_ids: container_ids, hosts: hosts, key_dir: key_dir, port_to_name: port_to_name}}
         else
           {:error, reason} ->
             Logger.error("DockerWorkerPool: failed to start workers: #{reason}")
@@ -163,6 +187,28 @@ defmodule SymphonyElixir.DockerWorkerPool do
   @impl true
   def handle_call(:container_ids, _from, state) do
     {:reply, state.container_ids, state}
+  end
+
+  @impl true
+  def handle_call({:restart_worker, host}, _from, state) do
+    case Map.get(state.port_to_name, host) do
+      nil ->
+        {:reply, {:error, :unknown_host}, state}
+
+      name ->
+        result =
+          case System.cmd("docker", ["restart", name], stderr_to_stdout: true) do
+            {_, 0} ->
+              Logger.info("DockerWorkerPool: restarted container #{name} for host #{host}")
+              :ok
+
+            {out, code} ->
+              Logger.warning("DockerWorkerPool: failed to restart #{name} (exit #{code}): #{String.trim(out)}")
+              {:error, "docker restart failed (exit #{code})"}
+          end
+
+        {:reply, result, state}
+    end
   end
 
   @impl true
@@ -247,17 +293,20 @@ defmodule SymphonyElixir.DockerWorkerPool do
     errors = Enum.filter(results, &match?({:error, _}, &1))
 
     if errors == [] do
-      {ids, hosts} =
+      {ids, hosts, names} =
         results
-        |> Enum.map(fn {:ok, id, host} -> {id, host} end)
-        |> Enum.unzip()
+        |> Enum.map(fn {:ok, id, host, name} -> {id, host, name} end)
+        |> Enum.reduce({[], [], []}, fn {id, host, name}, {ids, hosts, names} ->
+          {ids ++ [id], hosts ++ [host], names ++ [name]}
+        end)
 
-      {:ok, ids, hosts}
+      port_to_name = Enum.zip(hosts, names) |> Map.new()
+      {:ok, ids, hosts, port_to_name}
     else
       # Clean up any containers that did start
       results
-      |> Enum.filter(&match?({:ok, _, _}, &1))
-      |> Enum.each(fn {:ok, id, _} ->
+      |> Enum.filter(&match?({:ok, _, _, _}, &1))
+      |> Enum.each(fn {:ok, id, _, _} ->
         System.cmd("docker", ["rm", "-f", id], stderr_to_stdout: true)
       end)
 
@@ -292,7 +341,7 @@ defmodule SymphonyElixir.DockerWorkerPool do
       {output, 0} ->
         id = String.trim(output)
         Logger.info("DockerWorkerPool: started container #{id} on port #{port}")
-        {:ok, id, "localhost:#{port}"}
+        {:ok, id, "localhost:#{port}", name}
 
       {output, code} ->
         {:error, "docker run failed (exit #{code}): #{String.trim(output)}"}

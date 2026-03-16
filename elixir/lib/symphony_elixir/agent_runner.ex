@@ -3,6 +3,8 @@ defmodule SymphonyElixir.AgentRunner do
   Executes a single issue in its workspace with Codex.
   """
 
+  alias SymphonyElixir.DockerWorkerPool
+
   require Logger
   alias SymphonyElixir.Codex.AppServer
   alias SymphonyElixir.{Config, Linear.Issue, PromptBuilder, Tracker, Workspace}
@@ -39,6 +41,7 @@ defmodule SymphonyElixir.AgentRunner do
           end
         after
           Workspace.run_after_run_hook(workspace, issue, worker_host)
+          DockerWorkerPool.maybe_restart(worker_host)
         end
 
       {:error, reason} ->
