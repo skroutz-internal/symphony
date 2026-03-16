@@ -20,6 +20,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 RUN npm install --global @mariozechner/pi-coding-agent
 
 RUN useradd -m -s /bin/bash symphony \
+  && passwd -d symphony \
   && install -d -m 700 -o symphony -g symphony /home/symphony/.ssh \
   && install -d -m 755 -o symphony -g symphony /home/symphony/.pi \
   && install -d -m 755 -o symphony -g symphony /home/symphony/.pi/agent \

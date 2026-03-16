@@ -577,6 +577,11 @@ rl.on("line", async (line) => {
     log(`thread/start — ${dynamicTools.length} dynamic tools, cwd=${threadCwd}`);
 
     const cwd = threadCwd || process.cwd();
+    // Apply shim env early so SYMPHONY_AGENT_LOGS_ROOT is visible to log path helpers
+    const shimEnvEarly = loadShimEnv(cwd);
+    if (shimEnvEarly.SYMPHONY_AGENT_LOGS_ROOT) {
+      process.env.SYMPHONY_AGENT_LOGS_ROOT = shimEnvEarly.SYMPHONY_AGENT_LOGS_ROOT;
+    }
     shimLog = openShimLog(cwd);
     activityLog = openActivityLog(cwd);
     const sessionFile = piSessionPath(cwd);
