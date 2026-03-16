@@ -7,10 +7,15 @@ description: Monitor and land a PR. Use when the issue is in Human Review (poll 
 
 ## Human Review
 
-When the issue is in `Human Review`, run `pr_watch.py`. It blocks until a human approves the PR and CI passes (or no CI is configured). Do not poll manually, do not proceed to `Merging` without an approval.
+When the issue is in `Human Review`, run `pr_watch.py --wake-on-review`. It blocks until any human review arrives (approval, changes requested, or comments), then exits 0 printing the review state.
 
-On exit 2 (blocking review or comments detected): move the item to `Rework` and address the feedback.
-On exit 0 (approved + CI green): move the item to `Merging` and follow the Merging flow below.
+```bash
+python3 /path/to/pr_watch.py --wake-on-review
+```
+
+On exit 0 with `Review received: APPROVED`: move the item to `Merging` and follow the Merging flow below.
+On exit 0 with any other state, or exit 2 (blocking review/comments): move the item to `Rework` and address the feedback.
+On exit 5 (merge conflicts): rebase against main, push, then re-run.
 
 ## Merging
 

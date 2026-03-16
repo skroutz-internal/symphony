@@ -3,6 +3,7 @@ import asyncio
 import json
 import random
 import re
+import sys
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
@@ -326,11 +327,27 @@ def raise_on_human_feedback(
         raise _WatchExit(2)
 
 
-async def wait_for_feedback(pr_number: int, checks_done: asyncio.Event) -> None:
+async def wait_for_feedback(pr_number: int, checks_done: asyncio.Event, wake_on_review: bool = False) -> None:
     print("Waiting for review feedback...", flush=True)
+    initial_reviews: set[str] = set()
+    if wake_on_review:
+        _, _, reviews0 = await fetch_review_context(pr_number)
+        initial_reviews = {r.get("id", "") for r in dedupe_reviews(reviews0) if not is_bot_user(r.get("user", {}))}
     while True:
         issue_comments, review_comments, reviews = await fetch_review_context(pr_number)
         raise_on_human_feedback(issue_comments, review_comments, reviews)
+        if wake_on_review:
+            human_reviews = [
+                r for r in dedupe_reviews(reviews)
+                if not is_bot_user(r.get("user", {})) and r.get("id", "") not in initial_reviews
+            ]
+            if human_reviews:
+                for r in human_reviews:
+                    state = r.get("state", "UNKNOWN")
+                    author = r.get("user", {}).get("login", "unknown")
+                    body = r.get("body", "").strip()
+                    print(f"New review from {author}: {state}" + (f" — {body}" if body else ""))
+                return
         if checks_done.is_set():
             return
         await asyncio.sleep(POLL_SECONDS)
@@ -363,7 +380,7 @@ async def wait_for_checks(head_sha: str, checks_done: asyncio.Event) -> None:
         await asyncio.sleep(POLL_SECONDS)
 
 
-async def watch_pr() -> None:
+async def watch_pr(wake_on_review: bool = False) -> None:
     pr = await get_pr_info()
     if is_merge_conflicting(pr):
         print(
@@ -373,7 +390,7 @@ async def watch_pr() -> None:
         raise _WatchExit(5)
     head_sha = pr.head_sha
     checks_done = asyncio.Event()
-    feedback_task = asyncio.create_task(wait_for_feedback(pr.number, checks_done))
+    feedback_task = asyncio.create_task(wait_for_feedback(pr.number, checks_done, wake_on_review))
     checks_task = asyncio.create_task(wait_for_checks(head_sha, checks_done))
 
     async def head_monitor() -> None:
@@ -411,7 +428,8 @@ async def watch_pr() -> None:
 
 
 if __name__ == "__main__":
+    wake_on_review = "--wake-on-review" in sys.argv
     try:
-        asyncio.run(watch_pr())
+        asyncio.run(watch_pr(wake_on_review=wake_on_review))
     except _WatchExit as exc:
         raise SystemExit(exc.code) from None
