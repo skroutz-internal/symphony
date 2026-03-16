@@ -17,9 +17,16 @@ def latest_activity_log(logs_dir: Path) -> Path | None:
 
 
 def workspace_dirs(root: Path) -> list[Path]:
-    if not root.exists():
+    # Accept either the workspaces root (with _logs/ subdir) or _logs/ directly
+    logs_root = root / "_logs" if (root / "_logs").is_dir() else root
+    if not logs_root.exists():
         return []
-    return sorted([p for p in root.iterdir() if p.is_dir() and not p.name.startswith("_")])
+    return sorted([p for p in logs_root.iterdir() if p.is_dir()])
+
+
+def logs_dir_for(root: Path, ws: Path) -> Path:
+    logs_root = root / "_logs" if (root / "_logs").is_dir() else root
+    return logs_root / ws.name
 
 
 class FileFollower:
@@ -103,7 +110,7 @@ def main() -> int:
 
     while True:
         for ws in workspace_dirs(root):
-            logs_dir = root / "_logs" / ws.name
+            logs_dir = logs_dir_for(root, ws)
             log = latest_activity_log(logs_dir)
             if not log:
                 continue
