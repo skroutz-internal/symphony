@@ -26,11 +26,26 @@ defmodule SymphonyElixir.Config do
           turn_sandbox_policy: map()
         }
 
+  @dynamic_ssh_hosts_key {__MODULE__, :dynamic_ssh_hosts}
+
+  @spec set_dynamic_ssh_hosts([String.t()]) :: :ok
+  def set_dynamic_ssh_hosts(hosts) when is_list(hosts) do
+    :persistent_term.put(@dynamic_ssh_hosts_key, hosts)
+    :ok
+  end
+
+  @spec dynamic_ssh_hosts() :: [String.t()]
+  def dynamic_ssh_hosts do
+    :persistent_term.get(@dynamic_ssh_hosts_key, [])
+  end
+
   @spec settings() :: {:ok, Schema.t()} | {:error, term()}
   def settings do
     case Workflow.current() do
       {:ok, %{config: config}} when is_map(config) ->
-        Schema.parse(config)
+        with {:ok, schema} <- Schema.parse(config) do
+          {:ok, merge_dynamic_ssh_hosts(schema)}
+        end
 
       {:error, reason} ->
         {:error, reason}
@@ -142,6 +157,13 @@ defmodule SymphonyElixir.Config do
 
       true ->
         :ok
+    end
+  end
+
+  defp merge_dynamic_ssh_hosts(schema) do
+    case dynamic_ssh_hosts() do
+      [] -> schema
+      hosts -> put_in(schema.worker.ssh_hosts, hosts)
     end
   end
 
