@@ -17,7 +17,6 @@ defmodule SymphonyElixir.DockerWorkerPool do
           image: "my-project-worker:latest"
           n_workers: 2
           base_port: 2222
-          ssh_pubkey: "~/.ssh/id_ed25519.pub"
           mounts:
             - host: "~/code/myproject"
               container: "/repos/myproject"
@@ -69,7 +68,6 @@ defmodule SymphonyElixir.DockerWorkerPool do
       :image,
       n_workers: 1,
       base_port: 2222,
-      ssh_pubkey: "~/.ssh/id_ed25519.pub",
       mounts: []
     ]
 
@@ -77,7 +75,6 @@ defmodule SymphonyElixir.DockerWorkerPool do
             image: String.t(),
             n_workers: pos_integer(),
             base_port: pos_integer(),
-            ssh_pubkey: String.t(),
             mounts: [Mount.t()]
           }
 
@@ -90,7 +87,6 @@ defmodule SymphonyElixir.DockerWorkerPool do
            image: image,
            n_workers: Map.get(docker, "n_workers", 1),
            base_port: Map.get(docker, "base_port", 2222),
-           ssh_pubkey: Path.expand(Map.get(docker, "ssh_pubkey", "~/.ssh/id_ed25519.pub")),
            mounts: mounts
          }}
       end
@@ -123,7 +119,7 @@ defmodule SymphonyElixir.DockerWorkerPool do
 
   defmodule State do
     @moduledoc false
-    defstruct container_ids: [], hosts: []
+    defstruct container_ids: [], hosts: [], key_dir: nil
   end
 
   @spec start_link(keyword()) :: GenServer.on_start()
@@ -146,14 +142,15 @@ defmodule SymphonyElixir.DockerWorkerPool do
       {:ok, docker_config} ->
         Logger.info("DockerWorkerPool: starting #{docker_config.n_workers} worker(s) from image #{docker_config.image}")
 
-        case spawn_workers(docker_config) do
-          {:ok, container_ids, hosts} ->
-            Config.set_dynamic_ssh_hosts(hosts)
-            Logger.info("DockerWorkerPool: workers ready at #{inspect(hosts)}")
-            {:ok, %State{container_ids: container_ids, hosts: hosts}}
-
+        with {:ok, key_dir, pubkey} <- generate_keypair(),
+             :ok <- configure_ssh(key_dir),
+             {:ok, container_ids, hosts} <- spawn_workers(docker_config, pubkey) do
+          Config.set_dynamic_ssh_hosts(hosts)
+          Logger.info("DockerWorkerPool: workers ready at #{inspect(hosts)}")
+          {:ok, %State{container_ids: container_ids, hosts: hosts, key_dir: key_dir}}
+        else
           {:error, reason} ->
-            Logger.error("DockerWorkerPool: failed to spawn workers: #{reason}")
+            Logger.error("DockerWorkerPool: failed to start workers: #{reason}")
             {:stop, {:docker_worker_pool_failed, reason}}
         end
 
@@ -169,7 +166,7 @@ defmodule SymphonyElixir.DockerWorkerPool do
   end
 
   @impl true
-  def terminate(_reason, %State{container_ids: ids}) when ids != [] do
+  def terminate(_reason, %State{container_ids: ids, key_dir: key_dir}) when ids != [] do
     Logger.info("DockerWorkerPool: stopping #{length(ids)} container(s)")
 
     Enum.each(ids, fn id ->
@@ -178,6 +175,8 @@ defmodule SymphonyElixir.DockerWorkerPool do
         {out, code} -> Logger.warning("DockerWorkerPool: failed to remove #{id} (exit #{code}): #{String.trim(out)}")
       end
     end)
+
+    if key_dir, do: File.rm_rf!(key_dir)
   end
 
   def terminate(_reason, _state), do: :ok
@@ -196,17 +195,53 @@ defmodule SymphonyElixir.DockerWorkerPool do
     end
   end
 
-  defp spawn_workers(%DockerConfig{} = cfg) do
-    pubkey_content =
-      case File.read(cfg.ssh_pubkey) do
-        {:ok, content} -> String.trim(content)
-        {:error, _} -> nil
-      end
+  defp generate_keypair do
+    key_dir = Path.join(System.tmp_dir!(), "symphony-worker-key-#{:os.getpid()}")
+    File.mkdir_p!(key_dir)
+    File.chmod!(key_dir, 0o700)
+    key_path = Path.join(key_dir, "id_ed25519")
 
+    case System.cmd(
+           "ssh-keygen",
+           ["-t", "ed25519", "-N", "", "-C", "symphony-worker-ephemeral", "-f", key_path],
+           stderr_to_stdout: true
+         ) do
+      {_, 0} ->
+        {:ok, pubkey} = File.read(key_path <> ".pub")
+        Logger.debug("DockerWorkerPool: generated ephemeral keypair at #{key_path}")
+        {:ok, key_dir, String.trim(pubkey)}
+
+      {out, code} ->
+        File.rm_rf!(key_dir)
+        {:error, "ssh-keygen failed (exit #{code}): #{String.trim(out)}"}
+    end
+  end
+
+  defp configure_ssh(key_dir) do
+    key_path = Path.join(key_dir, "id_ed25519")
+    config_path = Path.join(key_dir, "ssh_config")
+
+    config = """
+    Host *
+      User root
+      IdentityFile #{key_path}
+      IdentitiesOnly yes
+      StrictHostKeyChecking no
+      UserKnownHostsFile /dev/null
+      LogLevel ERROR
+    """
+
+    File.write!(config_path, config)
+    System.put_env("SYMPHONY_SSH_CONFIG", config_path)
+    Logger.debug("DockerWorkerPool: SSH config written to #{config_path}")
+    :ok
+  end
+
+  defp spawn_workers(%DockerConfig{} = cfg, pubkey) do
     results =
       Enum.map(1..cfg.n_workers, fn i ->
         port = cfg.base_port + i - 1
-        spawn_container(cfg, port, pubkey_content)
+        spawn_container(cfg, port, pubkey)
       end)
 
     errors = Enum.filter(results, &match?({:error, _}, &1))
@@ -230,7 +265,7 @@ defmodule SymphonyElixir.DockerWorkerPool do
     end
   end
 
-  defp spawn_container(%DockerConfig{} = cfg, port, pubkey_content) do
+  defp spawn_container(%DockerConfig{} = cfg, port, pubkey) do
     name = "symphony-worker-#{port}"
 
     # Remove any stale container with the same name (e.g. from a previous crashed run)
@@ -240,12 +275,7 @@ defmodule SymphonyElixir.DockerWorkerPool do
       ["-v", "#{m.host}:#{m.container}:#{m.mode}"]
     end)
 
-    pubkey_args =
-      if pubkey_content do
-        ["-e", "SYMPHONY_SSH_AUTHORIZED_KEY=#{pubkey_content}"]
-      else
-        []
-      end
+    pubkey_args = ["-e", "SYMPHONY_SSH_AUTHORIZED_KEY=#{pubkey}"]
 
     args =
       ["run", "-d", "--restart", "always",
