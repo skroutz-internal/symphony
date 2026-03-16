@@ -23,7 +23,6 @@ RUN useradd -m -s /bin/bash symphony \
   && install -d -m 700 -o symphony -g symphony /home/symphony/.ssh \
   && install -d -m 755 -o symphony -g symphony /home/symphony/.pi \
   && install -d -m 755 -o symphony -g symphony /home/symphony/.pi/agent \
-  && install -d -m 755 -o symphony -g symphony /home/symphony/.pi/agent/skills \
   && install -d -m 775 -o symphony -g symphony /workspaces \
   && install -d -m 755 /run/symphony/ssh /var/run/sshd
 

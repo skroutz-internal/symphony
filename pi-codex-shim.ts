@@ -460,8 +460,7 @@ function startPiProcess(cwd, sessionFile, socketPath) {
   const shimEnv = loadShimEnv(cwd);
   const agentIdentity = createAgentIdentity();
 
-  const landSkillPath = process.env.SYMPHONY_LAND_SKILL_PATH || path.join(__dirname, "pi-skills/land");
-  const args = ["--mode", "rpc", "--session", sessionFile, "--no-skills", "--skill", landSkillPath, "--no-extensions"];
+  const args = ["--mode", "rpc", "--session", sessionFile, "--no-skills", "--skill", path.join(__dirname, "pi-skills/land"), "--no-extensions"];
   if (shimEnv.MODEL) args.splice(2, 0, "--model", shimEnv.MODEL);
   if (hasExtension) {
     args.push("-e", extensionPath);
