@@ -353,8 +353,24 @@ async def wait_for_feedback(pr_number: int, checks_done: asyncio.Event, wake_on_
         await asyncio.sleep(POLL_SECONDS)
 
 
-async def wait_for_checks(head_sha: str, checks_done: asyncio.Event) -> None:
+async def repo_has_workflows(pr_url: str) -> bool:
+    """Return True if the repo has any GitHub Actions workflows defined."""
+    # pr_url e.g. https://github.com/owner/repo/pull/N
+    parts = pr_url.rstrip("/").split("/")
+    nwo = f"{parts[-4]}/{parts[-3]}"
+    try:
+        data = await run_gh("api", f"repos/{nwo}/actions/workflows", "--jq", ".total_count")
+        return int(data.strip()) > 0
+    except Exception:
+        return True  # assume CI exists if we can't tell
+
+
+async def wait_for_checks(head_sha: str, checks_done: asyncio.Event, pr_url: str = "") -> None:
     print("Waiting for CI checks...", flush=True)
+    if pr_url and not await repo_has_workflows(pr_url):
+        print("No GitHub Actions workflows configured; skipping CI wait.")
+        checks_done.set()
+        return
     empty_seconds = 0
     while True:
         check_runs = await get_check_runs(head_sha)
@@ -391,7 +407,7 @@ async def watch_pr(wake_on_review: bool = False) -> None:
     head_sha = pr.head_sha
     checks_done = asyncio.Event()
     feedback_task = asyncio.create_task(wait_for_feedback(pr.number, checks_done, wake_on_review))
-    checks_task = asyncio.create_task(wait_for_checks(head_sha, checks_done))
+    checks_task = asyncio.create_task(wait_for_checks(head_sha, checks_done, pr.url))
 
     async def head_monitor() -> None:
         while True:
