@@ -9,6 +9,7 @@ defmodule SymphonyElixir.Orchestrator do
 
   alias SymphonyElixir.{AgentRunner, Config, StatusDashboard, Tracker, Workspace}
   alias SymphonyElixir.Linear.Issue
+  alias SymphonyElixirWeb.ObservabilityPubSub
 
   @continuation_retry_delay_ms 1_000
   @failure_retry_base_ms 10_000
@@ -189,6 +190,10 @@ defmodule SymphonyElixir.Orchestrator do
         {:noreply, state}
 
       running_entry ->
+        if update[:event] == :frontend_stream do
+          ObservabilityPubSub.broadcast_frontend_stream(running_entry.identifier, update)
+        end
+
         {updated_running_entry, token_delta} = integrate_codex_update(running_entry, update)
 
         state =

@@ -507,9 +507,11 @@ defmodule SymphonyElixir.Codex.AppServer do
 
           {:error, {:turn_input_required, payload}}
         else
+          event = if method == "frontend-stream", do: :frontend_stream, else: :notification
+
           emit_message(
             on_message,
-            :notification,
+            event,
             %{
               payload: payload,
               raw: payload_string
