@@ -55,7 +55,7 @@ const exposeBlock = `
       window.__piLabelMap     = labelMap;
       window.__piNavigateTo   = navigateTo;
       window.__piDefaultLeaf  = leafId;
-      window.__piInvalidateTree = function() { treeNodeMap = null; };
+      window.__piInvalidateTree = function() { treeNodeMap = null; treeRendered = false; };
 `;
 
 const iifePos = html.lastIndexOf(IIFE_END);
@@ -78,6 +78,8 @@ const sseClient = `
 (function () {
   var SSE_URL = ${JSON.stringify(SSE_URL_PLACEHOLDER)};
   var indicator = document.getElementById('pi-live-indicator');
+  var sessionCount = 0;
+  var entryCount = 0;
 
   function setStatus(text, color) {
     if (indicator) {
@@ -86,11 +88,44 @@ const sseClient = `
     }
   }
 
+  var lastEntryId = null;
+
+  function pushEntry(entry) {
+    window.__piEntries.push(entry);
+    window.__piById.set(entry.id, entry);
+    lastEntryId = entry.id;
+    if (window.__piInvalidateTree) window.__piInvalidateTree();
+    window.__piNavigateTo(entry.id, 'bottom');
+  }
+
   function applyEntry(entry) {
     if (!entry || !entry.id) return;
 
-    window.__piEntries.push(entry);
-    window.__piById.set(entry.id, entry);
+    entryCount++;
+    setStatus('● ' + entryCount + ' entries · s' + (sessionCount || 1), '#4ade80');
+
+    if (entry.type === 'session') {
+      sessionCount++;
+      if (sessionCount > 1) {
+        // Inject a synthetic divider as the last node of the previous session.
+        // The new session root hangs off it, making both sessions a single continuous tree.
+        var dividerId = 'session-break-' + Date.now();
+        var divider = {
+          type: 'message',
+          id: dividerId,
+          parentId: lastEntryId,
+          timestamp: new Date().toISOString(),
+          message: {
+            role: 'assistant',
+            content: [{ type: 'text', text: '---\\n\\n**↩ New session started** — previous conversation history was not included.\\n\\n---' }],
+          },
+        };
+        pushEntry(divider);
+
+        // Attach the new session root to the divider
+        entry.parentId = dividerId;
+      }
+    }
 
     if (entry.type === 'message' && entry.message && entry.message.role === 'assistant') {
       var content = entry.message.content;
@@ -108,8 +143,7 @@ const sseClient = `
       window.__piLabelMap.set(entry.targetId, entry.label);
     }
 
-    if (window.__piInvalidateTree) window.__piInvalidateTree();
-    window.__piNavigateTo(entry.id, 'bottom');
+    pushEntry(entry);
   }
 
   function connect() {
