@@ -25,8 +25,23 @@ defmodule SymphonyElixirWeb.SessionStreamController do
       |> put_resp_header("x-accel-buffering", "no")
       |> send_chunked(200)
 
+    # Subscribe before draining so no events are lost between the two steps.
+    # Buffered events that also arrive as live messages are harmless duplicates;
+    # the browser client deduplicates by entry ID.
     :ok = ObservabilityPubSub.subscribe_stream(issue_identifier)
-    Logger.debug("SSE client connected for issue=#{issue_identifier}")
+
+    buffered = SymphonyElixir.StreamBuffer.drain(issue_identifier)
+    Logger.debug("SSE client connected for issue=#{issue_identifier}, replaying #{length(buffered)} buffered events")
+
+    conn = Enum.reduce_while(buffered, conn, fn event_data, conn ->
+      payload = Jason.encode!(event_data)
+      case Conn.chunk(conn, "data: #{payload}\n\n") do
+        {:ok, conn} -> {:cont, conn}
+        {:error, reason} ->
+          Logger.debug("SSE client disconnected during replay for issue=#{issue_identifier}: #{inspect(reason)}")
+          {:halt, conn}
+      end
+    end)
 
     stream_loop(conn, issue_identifier)
   end

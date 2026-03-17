@@ -191,6 +191,7 @@ defmodule SymphonyElixir.Orchestrator do
 
       running_entry ->
         if update[:event] == :frontend_stream do
+          SymphonyElixir.StreamBuffer.push(running_entry.identifier, update)
           ObservabilityPubSub.broadcast_frontend_stream(running_entry.identifier, update)
         end
 
@@ -859,6 +860,7 @@ defmodule SymphonyElixir.Orchestrator do
         Logger.info("Issue state is terminal: issue_id=#{issue_id} issue_identifier=#{issue.identifier} state=#{issue.state}; removing associated workspace")
 
         cleanup_issue_workspace(issue.identifier, metadata[:worker_host])
+        SymphonyElixir.StreamBuffer.clear(issue.identifier)
         {:noreply, release_issue_claim(state, issue_id)}
 
       retry_candidate_issue?(issue, terminal_states) ->
@@ -871,8 +873,9 @@ defmodule SymphonyElixir.Orchestrator do
     end
   end
 
-  defp handle_retry_issue_lookup(nil, state, issue_id, _attempt, _metadata) do
+  defp handle_retry_issue_lookup(nil, state, issue_id, _attempt, metadata) do
     Logger.debug("Issue no longer visible, removing claim issue_id=#{issue_id}")
+    if identifier = metadata[:identifier], do: SymphonyElixir.StreamBuffer.clear(identifier)
     {:noreply, release_issue_claim(state, issue_id)}
   end
 

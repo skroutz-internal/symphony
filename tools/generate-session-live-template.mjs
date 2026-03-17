@@ -100,6 +100,8 @@ const sseClient = `
 
   function applyEntry(entry) {
     if (!entry || !entry.id) return;
+    // Deduplicate: buffer replay may send events already seen live
+    if (window.__piById.has(entry.id)) return;
 
     entryCount++;
     setStatus('● ' + entryCount + ' entries · s' + (sessionCount || 1), '#4ade80');

@@ -1062,7 +1062,7 @@
     </div>
   </div>
 
-  <script id="session-data" type="application/json">eyJoZWFkZXIiOnsidHlwZSI6InNlc3Npb24iLCJ2ZXJzaW9uIjozLCJpZCI6ImxpdmUtc3R1YiIsInRpbWVzdGFtcCI6IjIwMjYtMDMtMTdUMTI6NTU6MzguNjIwWiIsImN3ZCI6Ii8ifSwiZW50cmllcyI6W10sImxlYWZJZCI6bnVsbH0=</script>
+  <script id="session-data" type="application/json">eyJoZWFkZXIiOnsidHlwZSI6InNlc3Npb24iLCJ2ZXJzaW9uIjozLCJpZCI6ImxpdmUtc3R1YiIsInRpbWVzdGFtcCI6IjIwMjYtMDMtMTdUMTM6MDk6MTIuNTAyWiIsImN3ZCI6Ii8ifSwiZW50cmllcyI6W10sImxlYWZJZCI6bnVsbH0=</script>
 
   <!-- Vendored libraries -->
   <script>/**
@@ -3918,6 +3918,8 @@ return He}()
 
   function applyEntry(entry) {
     if (!entry || !entry.id) return;
+    // Deduplicate: buffer replay may send events already seen live
+    if (window.__piById.has(entry.id)) return;
 
     entryCount++;
     setStatus('● ' + entryCount + ' entries · s' + (sessionCount || 1), '#4ade80');
