@@ -348,7 +348,9 @@ async def wait_for_feedback(pr_number: int, checks_done: asyncio.Event, wake_on_
                     body = r.get("body", "").strip()
                     print(f"New review from {author}: {state}" + (f" — {body}" if body else ""))
                 return
-        if checks_done.is_set():
+        # In wake-on-review mode, keep waiting for explicit human feedback
+        # even when CI is absent or already complete.
+        if checks_done.is_set() and not wake_on_review:
             return
         await asyncio.sleep(POLL_SECONDS)
 
