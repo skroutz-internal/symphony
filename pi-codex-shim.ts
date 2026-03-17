@@ -487,6 +487,61 @@ function handleUiRequest(msg) {
 
 // ── pi process lifecycle ───────────────────────────────────────────────────
 
+// ── session JSONL tail → forward as frontend-stream ───────────────────────
+//
+// pi writes entries to the session JSONL as it runs. We tail the file and
+// forward each line to Symphony as {"method":"frontend-stream","params":<entry>}
+// so Symphony can broadcast them via SSE to connected browsers.
+
+function tailSessionFile(sessionFile) {
+  let offset = 0;
+
+  function readNew() {
+    try {
+      const size = fs.statSync(sessionFile).size;
+      if (size <= offset) return;
+
+      const fd = fs.openSync(sessionFile, "r");
+      const buf = Buffer.alloc(size - offset);
+      const bytesRead = fs.readSync(fd, buf, 0, size - offset, offset);
+      fs.closeSync(fd);
+      offset += bytesRead;
+
+      const lines = buf.toString("utf8", 0, bytesRead).split("\n").filter((l) => l.trim());
+      for (const line of lines) {
+        try {
+          const entry = JSON.parse(line);
+          send({ method: "frontend-stream", params: entry });
+        } catch {
+          log(`tailSessionFile: skipping malformed line: ${line.slice(0, 100)}`);
+        }
+      }
+    } catch {
+      // file may not exist yet or be momentarily locked — ignore
+    }
+  }
+
+  function waitAndWatch() {
+    if (!fs.existsSync(sessionFile)) {
+      setTimeout(waitAndWatch, 100);
+      return;
+    }
+    readNew(); // replay any entries already written
+    try {
+      fs.watch(sessionFile, { persistent: false }, (event) => {
+        if (event === "change") readNew();
+      });
+      log(`tailSessionFile: watching ${sessionFile}`);
+    } catch {
+      // fs.watch unavailable (e.g. some CI environments) — fall back to polling
+      log(`tailSessionFile: fs.watch failed, polling ${sessionFile}`);
+      setInterval(readNew, 500);
+    }
+  }
+
+  waitAndWatch();
+}
+
 function startPiProcess(cwd, sessionFile, socketPath) {
   const piPath = process.env.PI_BIN || "pi";
   const extensionPath = path.join(__dirname, ".pi", "extensions", "shim-extention.ts");
@@ -625,6 +680,7 @@ rl.on("line", async (line) => {
     socketClose = close;
 
     startPiProcess(cwd, sessionFile, socketPath);
+    tailSessionFile(sessionFile);
 
     send({ id, result: { thread: { id: "pi-thread-1" } } });
     return;
