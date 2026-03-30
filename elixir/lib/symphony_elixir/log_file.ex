@@ -40,7 +40,9 @@ defmodule SymphonyElixir.LogFile do
            disk_log_handler_config(expanded_path, max_bytes, max_files)
          ) do
       :ok ->
-        remove_default_console_handler()
+        :ok
+
+      {:error, {:already_exist, @handler_id}} ->
         :ok
 
       {:error, reason} ->
@@ -53,14 +55,6 @@ defmodule SymphonyElixir.LogFile do
     case :logger.remove_handler(@handler_id) do
       :ok -> :ok
       {:error, {:not_found, @handler_id}} -> :ok
-      {:error, _reason} -> :ok
-    end
-  end
-
-  defp remove_default_console_handler do
-    case :logger.remove_handler(:default) do
-      :ok -> :ok
-      {:error, {:not_found, :default}} -> :ok
       {:error, _reason} -> :ok
     end
   end

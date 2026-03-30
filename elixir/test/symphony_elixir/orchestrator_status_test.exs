@@ -1272,6 +1272,11 @@ defmodule SymphonyElixir.OrchestratorStatusTest do
     assert disk_config.max_no_files > 0
   end
 
+  test "application keeps the default console logger handler enabled" do
+    assert {:ok, handler_config} = :logger.get_handler_config(:default)
+    assert handler_config.module == :logger_std_h
+  end
+
   test "status dashboard renders last codex message in EVENT column" do
     row =
       StatusDashboard.format_running_summary_for_test(%{

@@ -77,8 +77,10 @@ If no path is passed, Symphony defaults to `./WORKFLOW.md`.
 
 Optional flags:
 
-- `--logs-root` tells Symphony to write logs under a different directory (default: `./log`)
+- `--logs-root` tells Symphony to write rotating logs under a different directory (default: `./log`)
 - `--port` also starts the Phoenix observability service (default: disabled)
+
+Symphony logs to stdout/stderr and also keeps the rotating log file under `./log` by default.
 
 The `WORKFLOW.md` file uses YAML front matter for configuration, plus a Markdown body used as the
 Codex session prompt.
