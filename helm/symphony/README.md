@@ -110,6 +110,18 @@ persistence:
   existingClaim: symphony-workspaces
 ```
 
+## Image publishing
+
+Images are published to GHCR by GitHub Actions and pulled in Kubernetes through Harbor's GHCR proxy.
+
+Publish target:
+- `ghcr.io/skroutz-internal/symphony:latest`
+
+Helm pull target:
+- `harbor.skroutz.gr/ghcr/skroutz-internal/symphony:latest`
+
+The current workflow publishes only `latest` from `main` while we are prototyping.
+
 ## Logs and terminal dashboard
 
 By default, the chart disables Symphony's terminal dashboard in the rendered workflow:
@@ -124,7 +136,15 @@ The application now keeps Elixir's default console logger enabled, so `kubectl l
 Symphony also keeps its rotating log file inside the pod at:
 - `/var/lib/symphony/log/symphony.log.1`
 
-## Current limitation
+## Current limitations
 
-The chart still assumes `tracker.api_key` comes from `GITHUB_TOKEN` in the workflow/env.
-GitHub App token brokering is planned but not wired into Symphony runtime yet.
+Current chart scope and limitations:
+
+- server-only deployment; no worker StatefulSet yet
+- no worker headless Service yet
+- no SSH worker wiring yet
+- no delegated per-run worker repo tokens yet
+- GitHub Project v2 control remains a Symphony concern, not a worker concern
+- the runtime still assumes `tracker.api_key` comes from `GITHUB_TOKEN` in the workflow/env
+- GitHub App token brokering is planned but not wired into Symphony runtime yet
+- default storage mode is still `emptyDir`, so workspace state is not preserved unless persistence is explicitly enabled
