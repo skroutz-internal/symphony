@@ -88,3 +88,7 @@ resources: {}
 
 persistence:
   enabled: false
+  existingClaim: ""
+  mountPath: /var/lib/symphony/workspaces
+  size: 10Gi
+  storageClassName: ""

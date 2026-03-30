@@ -89,6 +89,27 @@ When configured, the chart exposes:
 - `GITHUB_INSTALLATION_ID`
 - `GITHUB_APP_PRIVATE_KEY_PATH=/etc/symphony/github-app/app-private-key.pem`
 
+## Storage
+
+By default, the chart uses `emptyDir` for `/var/lib/symphony/workspaces`.
+
+To enable persistence:
+
+```yaml
+persistence:
+  enabled: true
+  size: 10Gi
+  storageClassName: ""
+```
+
+To use an existing PVC:
+
+```yaml
+persistence:
+  enabled: true
+  existingClaim: symphony-workspaces
+```
+
 ## Logs and terminal dashboard
 
 By default, the chart disables Symphony's terminal dashboard in the rendered workflow:

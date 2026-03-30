@@ -73,7 +73,7 @@ spec:
               readOnly: true
             {{- end }}
             - name: workspaces
-              mountPath: /var/lib/symphony/workspaces
+              mountPath: {{ .Values.persistence.mountPath }}
           resources:
             {{- toYaml .Values.resources | nindent 12 }}
       volumes:
@@ -89,4 +89,9 @@ spec:
                 path: app-private-key.pem
         {{- end }}
         - name: workspaces
+          {{- if .Values.persistence.enabled }}
+          persistentVolumeClaim:
+            claimName: {{ default (printf "%s-workspaces" (include "symphony.fullname" .)) .Values.persistence.existingClaim }}
+          {{- else }}
           emptyDir: {}
+          {{- end }}
