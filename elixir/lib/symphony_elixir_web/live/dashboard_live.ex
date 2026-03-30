@@ -154,7 +154,7 @@ defmodule SymphonyElixirWeb.DashboardLive do
                       <div class="issue-stack">
                         <span class="issue-id"><%= entry.issue_identifier %></span>
                         <a class="issue-link" href={"/api/v1/#{entry.issue_identifier}"}>JSON details</a>
-                        <a class="issue-link" href={"/api/v1/#{entry.issue_identifier}/session-live"} target="_blank">Live session</a>
+                        <a class="issue-link" href={"/api/v1/#{URI.encode(entry.issue_identifier, &URI.char_unreserved?/1)}/session-live"} target="_blank">Live session</a>
                       </div>
                     </td>
                     <td>

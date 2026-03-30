@@ -36,8 +36,6 @@ defmodule SymphonyElixirWeb.Router do
     match(:*, "/api/v1/refresh", ObservabilityApiController, :method_not_allowed)
     get("/api/v1/:issue_identifier/session-live", SessionLiveController, :show)
     match(:*, "/api/v1/:issue_identifier/session-live", ObservabilityApiController, :method_not_allowed)
-    get("/api/v1/:issue_identifier/session-live", SessionLiveController, :show)
-    match(:*, "/api/v1/:issue_identifier/session-live", ObservabilityApiController, :method_not_allowed)
     get("/api/v1/:issue_identifier/stream", SessionStreamController, :stream)
     match(:*, "/api/v1/:issue_identifier/stream", ObservabilityApiController, :method_not_allowed)
     get("/api/v1/:issue_identifier", ObservabilityApiController, :issue)

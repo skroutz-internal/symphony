@@ -65,4 +65,5 @@ defmodule SymphonyElixirWeb.SessionStreamController do
         end
     end
   end
+
 end

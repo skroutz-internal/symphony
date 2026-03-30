@@ -20,7 +20,7 @@ defmodule SymphonyElixirWeb.SessionLiveController do
   @sse_url_placeholder "{{SSE_URL}}"
 
   def show(conn, %{"issue_identifier" => issue_id}) do
-    sse_url = "/api/v1/#{issue_id}/stream"
+    sse_url = "/api/v1/#{URI.encode(issue_id, &URI.char_unreserved?/1)}/stream"
     html = String.replace(@template, @sse_url_placeholder, sse_url)
 
     conn
