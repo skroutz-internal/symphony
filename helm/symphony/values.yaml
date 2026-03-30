@@ -8,10 +8,15 @@ fullnameOverride: ""
 
 server:
   port: 4000
+  host: 0.0.0.0
+  command:
+    - symphony
+  extraArgs: []
 
 service:
   type: ClusterIP
   port: 4000
+  targetPort: 4000
 
 workflow:
   fileName: WORKFLOW.md
@@ -22,7 +27,7 @@ workflow:
     projectNumber: 47
     projectRepositories:
       - skroutz-internal/rehersal
-    apiKey: '!gh auth token'
+    apiKey: '$GITHUB_TOKEN'
     activeStates:
       - Todo
       - In Progress
@@ -67,8 +72,17 @@ workflow:
     Use the `gh` CLI for GitHub operations.
 
 secrets:
-  githubAppSecretName: ""
-  modelSecretName: ""
+  githubToken:
+    secretName: ""
+    key: GITHUB_TOKEN
+  model:
+    secretName: ""
+    key: OPENAI_API_KEY
+  githubApp:
+    secretName: ""
+    appIdKey: GITHUB_APP_ID
+    installationIdKey: GITHUB_INSTALLATION_ID
+    privateKeyKey: GITHUB_APP_PRIVATE_KEY
 
 resources: {}
 

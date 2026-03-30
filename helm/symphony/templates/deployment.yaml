@@ -1,0 +1,92 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "symphony.fullname" . }}
+  labels:
+    {{- include "symphony.labels" . | nindent 4 }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "symphony.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "symphony.selectorLabels" . | nindent 8 }}
+    spec:
+      containers:
+        - name: symphony
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          {{- if .Values.server.command }}
+          command:
+            {{- toYaml .Values.server.command | nindent 12 }}
+          {{- end }}
+          args:
+            - --i-understand-that-this-will-be-running-without-the-usual-guardrails
+            - --port
+            - {{ .Values.server.port | quote }}
+            - /etc/symphony/workflow/{{ .Values.workflow.fileName }}
+            {{- with .Values.server.extraArgs }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.server.port }}
+              protocol: TCP
+          env:
+            {{- if .Values.secrets.githubToken.secretName }}
+            - name: GITHUB_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.secrets.githubToken.secretName }}
+                  key: {{ .Values.secrets.githubToken.key }}
+            {{- end }}
+            {{- if .Values.secrets.model.secretName }}
+            - name: OPENAI_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.secrets.model.secretName }}
+                  key: {{ .Values.secrets.model.key }}
+            {{- end }}
+            {{- if .Values.secrets.githubApp.secretName }}
+            - name: GITHUB_APP_ID
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.secrets.githubApp.secretName }}
+                  key: {{ .Values.secrets.githubApp.appIdKey }}
+            - name: GITHUB_INSTALLATION_ID
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.secrets.githubApp.secretName }}
+                  key: {{ .Values.secrets.githubApp.installationIdKey }}
+            - name: GITHUB_APP_PRIVATE_KEY_PATH
+              value: /etc/symphony/github-app/app-private-key.pem
+            {{- end }}
+          volumeMounts:
+            - name: workflow
+              mountPath: /etc/symphony/workflow
+              readOnly: true
+            {{- if .Values.secrets.githubApp.secretName }}
+            - name: github-app-private-key
+              mountPath: /etc/symphony/github-app
+              readOnly: true
+            {{- end }}
+            - name: workspaces
+              mountPath: /var/lib/symphony/workspaces
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+      volumes:
+        - name: workflow
+          configMap:
+            name: {{ include "symphony.fullname" . }}-workflow
+        {{- if .Values.secrets.githubApp.secretName }}
+        - name: github-app-private-key
+          secret:
+            secretName: {{ .Values.secrets.githubApp.secretName }}
+            items:
+              - key: {{ .Values.secrets.githubApp.privateKeyKey }}
+                path: app-private-key.pem
+        {{- end }}
+        - name: workspaces
+          emptyDir: {}
