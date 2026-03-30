@@ -1,0 +1,76 @@
+image:
+  repository: harbor.skroutz.gr/ghcr/skroutz-internal/symphony
+  tag: latest
+  pullPolicy: IfNotPresent
+
+nameOverride: ""
+fullnameOverride: ""
+
+server:
+  port: 4000
+
+service:
+  type: ClusterIP
+  port: 4000
+
+workflow:
+  fileName: WORKFLOW.md
+  tracker:
+    kind: github
+    projectOwnerType: org
+    projectOwner: skroutz-internal
+    projectNumber: 47
+    projectRepositories:
+      - skroutz-internal/rehersal
+    apiKey: '!gh auth token'
+    activeStates:
+      - Todo
+      - In Progress
+      - Human Review
+      - Merging
+      - Rework
+    terminalStates:
+      - Done
+      - Closed
+  polling:
+    intervalMs: 30000
+  workspace:
+    root: /var/lib/symphony/workspaces
+  server:
+    port: 4000
+  observability:
+    dashboardEnabled: false
+  agent:
+    maxConcurrentAgents: 1
+    maxTurns: 5
+  codex:
+    command: node /opt/symphony/pi-codex-shim.ts
+    approvalPolicy: never
+    threadSandbox: workspace-write
+    turnSandboxPolicy:
+      type: workspaceWrite
+  body: |
+    You are working on a GitHub-backed Symphony workflow.
+
+    Issue: {{ issue.id }}
+    Title: {{ issue.title }}
+    State: {{ issue.state }}
+    URL: {{ issue.url }}
+
+    {% if issue.description %}
+    {{ issue.description }}
+    {% else %}
+    No description provided.
+    {% endif %}
+
+    Work only in the current working directory.
+    Use the `gh` CLI for GitHub operations.
+
+secrets:
+  githubAppSecretName: ""
+  modelSecretName: ""
+
+resources: {}
+
+persistence:
+  enabled: false
