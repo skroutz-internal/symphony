@@ -1,4 +1,4 @@
-name: Push Docker image to GHCR
+name: Push Docker images to GHCR
 
 on:
   push:
@@ -8,7 +8,6 @@ on:
 
 env:
   REGISTRY: ghcr.io
-  IMAGE_NAME: ${{ github.repository }}
 
 jobs:
   build:
@@ -17,6 +16,15 @@ jobs:
       contents: read
       packages: write
       id-token: write
+    strategy:
+      matrix:
+        include:
+          - name: server
+            image_name: ${{ github.repository }}
+            dockerfile: docker/server/Dockerfile
+          - name: worker
+            image_name: ${{ github.repository }}-worker
+            dockerfile: docker/worker/Dockerfile
 
     steps:
       - name: Checkout repository
@@ -39,7 +47,7 @@ jobs:
         id: meta
         uses: docker/metadata-action@030e881283bb7a6894de51c315a6bfe6a94e05cf # v6.0.0
         with:
-          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          images: ${{ env.REGISTRY }}/${{ matrix.image_name }}
           tags: |
             type=raw,value=latest
 
@@ -48,19 +56,19 @@ jobs:
         uses: docker/build-push-action@d08e5c354a6adb9ed34480a06d141179aa583294 # v7.0.0
         with:
           context: .
-          file: docker/server/Dockerfile
+          file: ${{ matrix.dockerfile }}
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          cache-from: type=gha,scope=${{ matrix.name }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.name }}
 
       - name: Show image version
         run: |
-          echo ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@${{ steps.build-and-push.outputs.digest }}
+          echo ${{ env.REGISTRY }}/${{ matrix.image_name }}@${{ steps.build-and-push.outputs.digest }}
 
       - name: Sign the published Docker image
         env:
           COSIGN_YES: "true"
         run: |
-          cosign sign ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@${{ steps.build-and-push.outputs.digest }}
+          cosign sign ${{ env.REGISTRY }}/${{ matrix.image_name }}@${{ steps.build-and-push.outputs.digest }}

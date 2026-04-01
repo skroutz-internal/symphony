@@ -1,0 +1,20 @@
+{{- if .Values.worker.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "symphony.fullname" . }}-ssh-config
+  labels:
+    {{- include "symphony.labels" . | nindent 4 }}
+data:
+  config: |
+    Host *
+      User symphony
+      IdentityFile /etc/symphony/ssh/id_ed25519
+      IdentitiesOnly yes
+{{- if .Values.worker.ssh.strictHostKeyChecking }}
+      StrictHostKeyChecking yes
+{{- else }}
+      StrictHostKeyChecking no
+      UserKnownHostsFile /dev/null
+{{- end }}
+{{- end }}

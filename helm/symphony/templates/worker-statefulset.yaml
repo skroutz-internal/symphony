@@ -1,0 +1,67 @@
+{{- if .Values.worker.enabled }}
+{{- $githubTokenSecretName := required "worker.enabled=true requires a GitHub token secret for the worker" (include "symphony.githubTokenSecretName" . | trim) -}}
+{{- $modelSecretName := required "worker.enabled=true requires a model secret for the worker" (include "symphony.modelSecretName" . | trim) -}}
+{{- $workerSshSecretName := required "worker.enabled=true requires a worker SSH secret" (include "symphony.workerSshSecretName" . | trim) -}}
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ include "symphony.workerFullname" . }}
+  labels:
+    {{- include "symphony.labels" . | nindent 4 }}
+spec:
+  serviceName: {{ include "symphony.workersServiceName" . }}
+  replicas: {{ .Values.worker.replicas }}
+  selector:
+    matchLabels:
+      {{- include "symphony.workerSelectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "symphony.workerSelectorLabels" . | nindent 8 }}
+    spec:
+      containers:
+        - name: worker
+          image: "{{ .Values.worker.image.repository }}:{{ .Values.worker.image.tag }}"
+          imagePullPolicy: {{ .Values.worker.image.pullPolicy }}
+          ports:
+            - name: ssh
+              containerPort: 22
+              protocol: TCP
+          volumeMounts:
+            - name: worker-secrets
+              mountPath: /run/symphony/secrets
+              readOnly: true
+            - name: worker-ssh-authorized-key
+              mountPath: /run/symphony/ssh
+              readOnly: true
+            - name: workspaces
+              mountPath: {{ .Values.workflow.workspace.root }}
+            - name: symphony-logs
+              mountPath: /symphony-logs
+          resources:
+            {{- toYaml .Values.worker.resources | nindent 12 }}
+      volumes:
+        - name: worker-secrets
+          projected:
+            sources:
+              - secret:
+                  name: {{ $githubTokenSecretName }}
+                  items:
+                    - key: {{ .Values.secrets.githubToken.key }}
+                      path: gh-token
+              - secret:
+                  name: {{ $modelSecretName }}
+                  items:
+                    - key: {{ .Values.secrets.model.key }}
+                      path: openai-token
+        - name: worker-ssh-authorized-key
+          secret:
+            secretName: {{ $workerSshSecretName }}
+            items:
+              - key: {{ .Values.secrets.workerSsh.publicKeyKey }}
+                path: authorized_key.pub
+        - name: workspaces
+          emptyDir: {}
+        - name: symphony-logs
+          emptyDir: {}
+{{- end }}

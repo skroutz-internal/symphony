@@ -1,0 +1,18 @@
+{{- if .Values.worker.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "symphony.workersServiceName" . }}
+  labels:
+    {{- include "symphony.labels" . | nindent 4 }}
+spec:
+  clusterIP: None
+  publishNotReadyAddresses: true
+  selector:
+    {{- include "symphony.workerSelectorLabels" . | nindent 4 }}
+  ports:
+    - name: ssh
+      port: {{ .Values.worker.service.port }}
+      targetPort: ssh
+      protocol: TCP
+{{- end }}

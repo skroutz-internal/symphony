@@ -23,6 +23,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     bash \
     ca-certificates \
     git \
+    openssh-client \
   && rm -rf /var/lib/apt/lists/*
 
 RUN useradd -m -d /var/lib/symphony -s /bin/bash symphony \

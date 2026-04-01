@@ -550,7 +550,7 @@ function startPiProcess(cwd, sessionFile, socketPath) {
   const shimEnv = loadShimEnv(cwd);
   const agentIdentity = createAgentIdentity();
 
-  const args = ["--mode", "rpc", "--session", sessionFile, "--no-skills", "--skill", path.join(__dirname, "pi-skills/land"), "--no-extensions"];
+  const args = ["--mode", "rpc", "--session", sessionFile, "--no-skills", "--skill", path.join(__dirname, ".pi", "skills", "land"), "--no-extensions"];
   if (shimEnv.MODEL) args.splice(2, 0, "--model", shimEnv.MODEL);
   if (hasExtension) {
     args.push("-e", extensionPath);

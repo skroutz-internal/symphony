@@ -1,6 +1,8 @@
 {{- $githubTokenSecretName := include "symphony.githubTokenSecretName" . | trim -}}
 {{- $modelSecretName := include "symphony.modelSecretName" . | trim -}}
 {{- $githubAppSecretName := include "symphony.githubAppSecretName" . | trim -}}
+{{- $workerSshSecretName := include "symphony.workerSshSecretName" . | trim -}}
+{{- if and .Values.worker.enabled (eq $workerSshSecretName "") }}{{ fail "worker.enabled=true requires secrets.workerSsh.secretName or secrets.workerSsh.create=true" }}{{- end }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -66,6 +68,10 @@ spec:
             - name: GITHUB_APP_PRIVATE_KEY_PATH
               value: /etc/symphony/github-app/app-private-key.pem
             {{- end }}
+            {{- if .Values.worker.enabled }}
+            - name: SYMPHONY_SSH_CONFIG
+              value: /etc/symphony/ssh/config
+            {{- end }}
           volumeMounts:
             - name: workflow
               mountPath: /etc/symphony/workflow
@@ -73,6 +79,16 @@ spec:
             {{- if $githubAppSecretName }}
             - name: github-app-private-key
               mountPath: /etc/symphony/github-app
+              readOnly: true
+            {{- end }}
+            {{- if .Values.worker.enabled }}
+            - name: worker-ssh-config
+              mountPath: /etc/symphony/ssh/config
+              subPath: config
+              readOnly: true
+            - name: worker-ssh-private-key
+              mountPath: /etc/symphony/ssh/id_ed25519
+              subPath: {{ .Values.secrets.workerSsh.privateKeyKey }}
               readOnly: true
             {{- end }}
             - name: workspaces
@@ -90,6 +106,20 @@ spec:
             items:
               - key: {{ .Values.secrets.githubApp.privateKeyKey }}
                 path: app-private-key.pem
+        {{- end }}
+        {{- if .Values.worker.enabled }}
+        - name: worker-ssh-config
+          configMap:
+            name: {{ include "symphony.fullname" . }}-ssh-config
+            items:
+              - key: config
+                path: config
+        - name: worker-ssh-private-key
+          secret:
+            secretName: {{ $workerSshSecretName }}
+            items:
+              - key: {{ .Values.secrets.workerSsh.privateKeyKey }}
+                path: {{ .Values.secrets.workerSsh.privateKeyKey }}
         {{- end }}
         - name: workspaces
           {{- if .Values.persistence.enabled }}

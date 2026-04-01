@@ -18,6 +18,19 @@ service:
   port: 4000
   targetPort: 4000
 
+worker:
+  enabled: false
+  replicas: 1
+  image:
+    repository: harbor.skroutz.gr/ghcr/skroutz-internal/symphony-worker
+    tag: latest
+    pullPolicy: IfNotPresent
+  service:
+    port: 22
+  ssh:
+    strictHostKeyChecking: false
+  resources: {}
+
 workflow:
   fileName: WORKFLOW.md
   tracker:
@@ -41,6 +54,94 @@ workflow:
     intervalMs: 30000
   workspace:
     root: /var/lib/symphony/workspaces
+  worker:
+    maxConcurrentAgentsPerHost: 1
+  hooks:
+    beforeRun: |
+      set -eux
+      ISSUE_IDENTIFIER="${SYMPHONY_ISSUE_IDENTIFIER:?missing SYMPHONY_ISSUE_IDENTIFIER}"
+      REMOTE_REPO="${ISSUE_IDENTIFIER%%#*}"
+      ISSUE_NUMBER="${ISSUE_IDENTIFIER##*#}"
+      TARGET_WORKTREE="$(pwd)"
+      BRANCH="symphony/issue-$ISSUE_NUMBER"
+      REPO_URL="https://github.com/${REMOTE_REPO}.git"
+      CACHE_ROOT="/var/lib/symphony/git-cache"
+      CACHE_REPO="$CACHE_ROOT/${REMOTE_REPO//\//__}.git"
+      PI_STATE_DIR=
+
+      mkdir -p "$CACHE_ROOT"
+      if [ ! -d "$CACHE_REPO" ]; then
+        TMP_CACHE="$CACHE_REPO.tmp.$$"
+        rm -rf "$TMP_CACHE"
+        git clone --mirror "$REPO_URL" "$TMP_CACHE"
+        mv "$TMP_CACHE" "$CACHE_REPO"
+      else
+        git --git-dir="$CACHE_REPO" remote update --prune
+      fi
+
+      if ! test -e "$TARGET_WORKTREE/.git" || ! git -C "$TARGET_WORKTREE" rev-parse --show-toplevel >/dev/null 2>&1; then
+        if [ -d "$TARGET_WORKTREE/.pi" ]; then
+          PI_STATE_DIR="$(mktemp -d)"
+          mv "$TARGET_WORKTREE/.pi" "$PI_STATE_DIR/.pi"
+        fi
+        find "$TARGET_WORKTREE" -mindepth 1 -maxdepth 1 -exec rm -rf {} + 2>/dev/null || true
+        git clone --reference-if-able "$CACHE_REPO" "$REPO_URL" "$TARGET_WORKTREE"
+        BASE_REF="origin/main"
+        if git -C "$TARGET_WORKTREE" show-ref --verify --quiet "refs/remotes/origin/$BRANCH"; then
+          BASE_REF="origin/$BRANCH"
+        fi
+        git -C "$TARGET_WORKTREE" checkout -B "$BRANCH" "$BASE_REF"
+        if [ -n "$PI_STATE_DIR" ] && [ -d "$PI_STATE_DIR/.pi" ]; then
+          mv "$PI_STATE_DIR/.pi" "$TARGET_WORKTREE/.pi"
+          rmdir "$PI_STATE_DIR"
+        fi
+      fi
+
+      test -e "$TARGET_WORKTREE/.git"
+      git -C "$TARGET_WORKTREE" rev-parse --show-toplevel >/dev/null
+      git -C "$TARGET_WORKTREE" remote get-url origin >/dev/null
+      git -C "$TARGET_WORKTREE" fetch origin --prune
+
+      EXCLUDE_FILE="$(git -C "$TARGET_WORKTREE" rev-parse --git-path info/exclude)"
+      mkdir -p "$(dirname "$EXCLUDE_FILE")"
+      for pattern in .agent-env .shim-env .pi-agent/; do
+        grep -qxF "$pattern" "$EXCLUDE_FILE" 2>/dev/null || printf '%s\n' "$pattern" >> "$EXCLUDE_FILE"
+      done
+
+      AGENT_DIR="$TARGET_WORKTREE/.pi-agent"
+      rm -rf "$AGENT_DIR"
+      mkdir -p "$AGENT_DIR"
+      {
+        printf 'GH_TOKEN='
+        cat /run/symphony/secrets/gh-token
+        printf '\nOPENAI_API_KEY='
+        cat /run/symphony/secrets/openai-token
+        printf '\nPI_CODING_AGENT_DIR=%s\n' "$AGENT_DIR"
+      } > "$TARGET_WORKTREE/.agent-env"
+      printf 'MODEL=openai/gpt-5.3-codex\nSYMPHONY_AGENT_LOGS_ROOT=/symphony-logs\n' > "$TARGET_WORKTREE/.shim-env"
+    beforeRemove: |
+      set -eu
+      if ! command -v gh >/dev/null 2>&1; then
+        exit 0
+      fi
+      if [ ! -s /run/symphony/secrets/gh-token ]; then
+        exit 0
+      fi
+      export GH_TOKEN="$(cat /run/symphony/secrets/gh-token)"
+      BRANCH="$(git branch --show-current || true)"
+      if [ -z "$BRANCH" ]; then
+        exit 0
+      fi
+      gh pr list \
+        --head "$BRANCH" \
+        --state open \
+        --json number \
+        --jq '.[].number' | while IFS= read -r PR_NUMBER; do
+          [ -n "$PR_NUMBER" ] || continue
+          gh pr close "$PR_NUMBER" \
+            --comment "Closing because the issue for branch $BRANCH entered a terminal state without merge."
+        done
+    timeoutMs: 60000
   server:
     port: 4000
   observability:
@@ -55,12 +156,13 @@ workflow:
     turnSandboxPolicy:
       type: workspaceWrite
   body: |
-    You are working on a GitHub-backed Symphony workflow.
+    You are working on the rehearsal project — a tiny Ruby Rack app used for fast Symphony test cycles.
 
     Issue: {{ issue.id }}
     Title: {{ issue.title }}
     State: {{ issue.state }}
     URL: {{ issue.url }}
+    Labels: {{ issue.labels }}
 
     {% if issue.description %}
     {{ issue.description }}
@@ -68,8 +170,63 @@ workflow:
     No description provided.
     {% endif %}
 
-    Work only in the current working directory.
-    Use the `gh` CLI for GitHub operations.
+    Work only in the current working directory. The repository checkout for this run is already prepared in the cwd; do not search for or switch to another checkout elsewhere on the filesystem.
+
+    GitHub scope for this run is strict:
+    - repo: derived from issue URL (`{{ issue.url }}`)
+    - project owner: `{{ tracker.project_owner }}` ({{ tracker.project_owner_type }})
+    - project number: `{{ tracker.project_number }}`
+
+    Use the `gh` CLI for GitHub operations. `GH_TOKEN` is available in the agent environment. Do not touch unrelated repositories or projects.
+    Read `SYMPHONY_AGENT_IDENTITY` from the environment and use that exact value to identify yourself in all GitHub interactions, for example in comments and PR replies.
+
+    Status map:
+    - `Todo` -> immediately move to `In Progress`, then implement.
+    - `In Progress` -> continue implementation.
+    - `Human Review` -> poll for PR approval using `gh pr view --json reviewDecision` every 30s. Do not run `pr_watch.py` here — it is for the Merging stage. Move to `Merging` only once `reviewDecision` is `APPROVED`.
+    - `Merging` -> on entry, open and follow the `land` skill; do not call `gh pr merge` directly.
+    - `Rework` -> address review feedback, push updates, return to `Human Review`.
+    - `Done` -> do nothing.
+
+    State transition guardrails:
+    - Never move an item from `Human Review` back to `In Progress`.
+    - If review feedback requires code changes, move `Human Review` -> `Rework`, not `In Progress`.
+    - Do not reuse the `In Progress` status-update command pattern for any other state.
+    - **Never move to `Merging` unless the PR has at least one approved review.** If `pr_watch.py` exits without an approval, stay in `Human Review` and report the outcome.
+
+    ## Related skills
+
+    - `land`: when the issue reaches `Merging`, explicitly read and follow the `land` skill. Do not call `gh pr merge` directly outside that skill flow.
+
+
+    1. Start by checking repo state: branch, `git status`, `HEAD`, existing PR for branch.
+    2. If the issue is `Todo`, move it to `In Progress` in GitHub Project 3 before coding.
+    3. Reproduce and implement the requested change.
+    4. Run relevant tests or validation before every push.
+    5. Commit with a clear message.
+    6. Push the branch.
+    7. Open or update a PR against `main`.
+    8. Ensure the PR has label `symphony`.
+    9. Ensure the issue and PR are linked (PR body or comment can reference the issue).
+    10. When implementation and checks are ready, move the project item to `Human Review`.
+    11. In `Human Review`, run `pr_watch.py` from the `land` skill. It will block until feedback arrives.
+    12. In `Merging`, explicitly read and follow the `land` skill. Do not call `gh pr merge` directly outside that skill flow.
+    13. After merge, move the project item to `Done`.
+
+    Helpful command pattern for project status updates (replace `<TARGET_STATE>` with the actual target state name, e.g. `Human Review`, `Merging`, `Rework`, `Done`):
+    ```bash
+    OWNER="{{ tracker.project_owner }}"
+    PROJECT_NUMBER="{{ tracker.project_number }}"
+    PROJECT_ID=$(gh project list --owner "$OWNER" --format json --jq ".projects[] | select(.number == $PROJECT_NUMBER) | .id")
+    ITEM_ID=$(gh project item-list "$PROJECT_NUMBER" --owner "$OWNER" --format json --jq '.items[] | select(.content.url == "{{ issue.url }}") | .id')
+    STATUS_FIELD_ID=$(gh project field-list "$PROJECT_NUMBER" --owner "$OWNER" --format json --jq '.fields[] | select(.name == "Status") | .id')
+    OPTION_ID=$(gh project field-list "$PROJECT_NUMBER" --owner "$OWNER" --format json --jq '.fields[] | select(.name == "Status") | .options[] | select(.name == "<TARGET_STATE>") | .id')
+    gh project item-edit --id "$ITEM_ID" --project-id "$PROJECT_ID" --field-id "$STATUS_FIELD_ID" --single-select-option-id "$OPTION_ID"
+    ```
+
+    When commenting on GitHub, prefix or sign your messages with `SYMPHONY_AGENT_IDENTITY` so humans can trace which Symphony agent produced them.
+
+    When your work is complete for the current state, report only completed actions and blockers. Do not include "next steps for user".
 
 secrets:
   githubToken:
@@ -91,6 +248,13 @@ secrets:
     appId: ""
     installationId: ""
     privateKey: ""
+  workerSsh:
+    create: false
+    secretName: ""
+    privateKeyKey: id_ed25519
+    publicKeyKey: id_ed25519.pub
+    privateKey: ""
+    publicKey: ""
 
 resources: {}
 

@@ -27,8 +27,11 @@ RUN useradd -m -s /bin/bash symphony \
   && install -d -m 775 -o symphony -g symphony /workspaces \
   && install -d -m 755 /run/symphony/ssh /var/run/sshd
 
-COPY sshd.conf /etc/ssh/sshd_config.d/symphony-worker.conf
-COPY entrypoint.sh /usr/local/bin/symphony-worker
+COPY docker/worker/sshd.conf /etc/ssh/sshd_config.d/symphony-worker.conf
+COPY docker/worker/entrypoint.sh /usr/local/bin/symphony-worker
+COPY pi-codex-shim.ts /opt/symphony/pi-codex-shim.ts
+COPY pi-skills /opt/symphony/.pi/skills
+COPY .pi/extensions /opt/symphony/.pi/extensions
 RUN chmod 755 /usr/local/bin/symphony-worker
 
 EXPOSE 22

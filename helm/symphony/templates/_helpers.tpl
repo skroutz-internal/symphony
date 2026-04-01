@@ -15,6 +15,20 @@
 {{- end -}}
 {{- end -}}
 
+{{- define "symphony.workerFullname" -}}
+{{- printf "%s-worker" (include "symphony.fullname" .) | trunc 63 | trimSuffix "-" -}}
+{{- end -}}
+
+{{- define "symphony.workersServiceName" -}}
+{{- printf "%s-workers" (include "symphony.fullname" .) | trunc 63 | trimSuffix "-" -}}
+{{- end -}}
+
+{{- define "symphony.workerHost" -}}
+{{- $root := .root -}}
+{{- $ordinal := .ordinal -}}
+{{- printf "%s-%d.%s.%s.svc.cluster.local" (include "symphony.workerFullname" $root) $ordinal (include "symphony.workersServiceName" $root) $root.Release.Namespace -}}
+{{- end -}}
+
 {{- define "symphony.chart" -}}
 {{- printf "%s-%s" .Chart.Name .Chart.Version | replace "+" "_" | trunc 63 | trimSuffix "-" -}}
 {{- end -}}
@@ -30,6 +44,11 @@ app.kubernetes.io/managed-by: {{ .Release.Service }}
 {{- define "symphony.selectorLabels" -}}
 app.kubernetes.io/name: {{ include "symphony.name" . }}
 app.kubernetes.io/instance: {{ .Release.Name }}
+{{- end -}}
+
+{{- define "symphony.workerSelectorLabels" -}}
+{{ include "symphony.selectorLabels" . }}
+app.kubernetes.io/component: worker
 {{- end -}}
 
 {{- define "symphony.serviceAccountName" -}}
@@ -57,5 +76,13 @@ default
 {{- .Values.secrets.githubApp.secretName -}}
 {{- else if .Values.secrets.githubApp.create -}}
 {{- printf "%s-github-app" (include "symphony.fullname" .) -}}
+{{- end -}}
+{{- end -}}
+
+{{- define "symphony.workerSshSecretName" -}}
+{{- if .Values.secrets.workerSsh.secretName -}}
+{{- .Values.secrets.workerSsh.secretName -}}
+{{- else if .Values.secrets.workerSsh.create -}}
+{{- printf "%s-worker-ssh" (include "symphony.fullname" .) -}}
 {{- end -}}
 {{- end -}}
