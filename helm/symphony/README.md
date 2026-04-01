@@ -6,6 +6,7 @@ This chart currently deploys:
 - one Symphony server `Deployment`
 - one `ConfigMap` with a rendered `WORKFLOW.md`
 - one `Service`
+- optional `Secret` resources for model and GitHub credentials
 
 It does **not** yet deploy workers.
 
@@ -19,11 +20,11 @@ Example:
 helm install symphony ./helm/symphony -n symphony --create-namespace
 ```
 
-## Required secrets
+## Secret management modes
 
-For the current GitHub-backed workflow, Symphony needs:
-- model credentials
-- GitHub App credentials
+The chart supports two modes.
+
+### 1) Reference existing Kubernetes Secrets
 
 Example values:
 
@@ -39,31 +40,45 @@ secrets:
     privateKeyKey: GITHUB_APP_PRIVATE_KEY
 ```
 
-Example Secret manifests:
+### 2) Let Helm create the Secrets
+
+This is convenient for local/prototype deployments when the secret material comes from files outside the repo.
+
+Example private values file kept outside git:
 
 ```yaml
-apiVersion: v1
-kind: Secret
-metadata:
-  name: symphony-openai
-stringData:
-  OPENAI_API_KEY: [REDACTED]
----
-apiVersion: v1
-kind: Secret
-metadata:
-  name: symphony-github-app
-stringData:
-  GITHUB_APP_ID: "1234567"
-  GITHUB_INSTALLATION_ID: "120103174"
-  GITHUB_APP_PRIVATE_KEY: |
-    [PRIVATE_KEY_REDACTED]
+secrets:
+  model:
+    create: true
+    value: [REDACTED]
+  githubApp:
+    create: true
+    appId: "1234567"
+    installationId: "120103174"
 ```
 
-When configured, the chart exposes:
+Then pass the private key from a local file with `--set-file`:
+
+```bash
+helm upgrade --install symphony ./helm/symphony \
+  -n symphony \
+  -f ~/.config/symphony/helm/private-values.yaml \
+  --set-file secrets.githubApp.privateKey=$HOME/.config/symphony/github-app/symphony-minions.pem
+```
+
+When `create: true` is set and `secretName` is empty, the chart creates default Secret names:
+- model: `<fullname>-model`
+- GitHub token: `<fullname>-github-token`
+- GitHub app: `<fullname>-github-app`
+
+## GitHub App wiring
+
+When GitHub App credentials are configured, the chart exposes:
 - `GITHUB_APP_ID`
 - `GITHUB_INSTALLATION_ID`
 - `GITHUB_APP_PRIVATE_KEY_PATH=/etc/symphony/github-app/app-private-key.pem`
+
+The private key is mounted as a Secret volume file.
 
 The rendered workflow sets:
 
@@ -74,9 +89,10 @@ tracker:
 
 So Symphony mints a short-lived installation token on demand from the mounted app credentials.
 
-## Optional static token secret
+## Optional static GitHub token
 
-A static `GITHUB_TOKEN` secret can still be wired through `secrets.githubToken`, but it is no longer the default path for the GitHub tracker flow.
+A static `GITHUB_TOKEN` secret can still be used through `secrets.githubToken`.
+That is no longer the default GitHub tracker path.
 
 ## Storage
 
@@ -136,4 +152,5 @@ Current chart scope and limitations:
 - GitHub Project v2 control remains a Symphony concern, not a worker concern
 - the token is currently minted on demand via `!/opt/symphony/bin/github-installation-token`
 - there is no retry-on-401 or token refresh flow yet once a previously minted token expires during a long-running process
+- if Helm creates Secrets, the secret material becomes part of Helm-managed release state
 - default storage mode is still `emptyDir`, so workspace state is not preserved unless persistence is explicitly enabled

@@ -1,3 +1,6 @@
+{{- $githubTokenSecretName := include "symphony.githubTokenSecretName" . | trim -}}
+{{- $modelSecretName := include "symphony.modelSecretName" . | trim -}}
+{{- $githubAppSecretName := include "symphony.githubAppSecretName" . | trim -}}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -35,30 +38,30 @@ spec:
               containerPort: {{ .Values.server.port }}
               protocol: TCP
           env:
-            {{- if .Values.secrets.githubToken.secretName }}
+            {{- if $githubTokenSecretName }}
             - name: GITHUB_TOKEN
               valueFrom:
                 secretKeyRef:
-                  name: {{ .Values.secrets.githubToken.secretName }}
+                  name: {{ $githubTokenSecretName }}
                   key: {{ .Values.secrets.githubToken.key }}
             {{- end }}
-            {{- if .Values.secrets.model.secretName }}
+            {{- if $modelSecretName }}
             - name: OPENAI_API_KEY
               valueFrom:
                 secretKeyRef:
-                  name: {{ .Values.secrets.model.secretName }}
+                  name: {{ $modelSecretName }}
                   key: {{ .Values.secrets.model.key }}
             {{- end }}
-            {{- if .Values.secrets.githubApp.secretName }}
+            {{- if $githubAppSecretName }}
             - name: GITHUB_APP_ID
               valueFrom:
                 secretKeyRef:
-                  name: {{ .Values.secrets.githubApp.secretName }}
+                  name: {{ $githubAppSecretName }}
                   key: {{ .Values.secrets.githubApp.appIdKey }}
             - name: GITHUB_INSTALLATION_ID
               valueFrom:
                 secretKeyRef:
-                  name: {{ .Values.secrets.githubApp.secretName }}
+                  name: {{ $githubAppSecretName }}
                   key: {{ .Values.secrets.githubApp.installationIdKey }}
             - name: GITHUB_APP_PRIVATE_KEY_PATH
               value: /etc/symphony/github-app/app-private-key.pem
@@ -67,7 +70,7 @@ spec:
             - name: workflow
               mountPath: /etc/symphony/workflow
               readOnly: true
-            {{- if .Values.secrets.githubApp.secretName }}
+            {{- if $githubAppSecretName }}
             - name: github-app-private-key
               mountPath: /etc/symphony/github-app
               readOnly: true
@@ -80,10 +83,10 @@ spec:
         - name: workflow
           configMap:
             name: {{ include "symphony.fullname" . }}-workflow
-        {{- if .Values.secrets.githubApp.secretName }}
+        {{- if $githubAppSecretName }}
         - name: github-app-private-key
           secret:
-            secretName: {{ .Values.secrets.githubApp.secretName }}
+            secretName: {{ $githubAppSecretName }}
             items:
               - key: {{ .Values.secrets.githubApp.privateKeyKey }}
                 path: app-private-key.pem

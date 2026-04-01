@@ -35,3 +35,27 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 {{- define "symphony.serviceAccountName" -}}
 default
 {{- end -}}
+
+{{- define "symphony.modelSecretName" -}}
+{{- if .Values.secrets.model.secretName -}}
+{{- .Values.secrets.model.secretName -}}
+{{- else if .Values.secrets.model.create -}}
+{{- printf "%s-model" (include "symphony.fullname" .) -}}
+{{- end -}}
+{{- end -}}
+
+{{- define "symphony.githubTokenSecretName" -}}
+{{- if .Values.secrets.githubToken.secretName -}}
+{{- .Values.secrets.githubToken.secretName -}}
+{{- else if .Values.secrets.githubToken.create -}}
+{{- printf "%s-github-token" (include "symphony.fullname" .) -}}
+{{- end -}}
+{{- end -}}
+
+{{- define "symphony.githubAppSecretName" -}}
+{{- if .Values.secrets.githubApp.secretName -}}
+{{- .Values.secrets.githubApp.secretName -}}
+{{- else if .Values.secrets.githubApp.create -}}
+{{- printf "%s-github-app" (include "symphony.fullname" .) -}}
+{{- end -}}
+{{- end -}}

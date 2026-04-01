@@ -73,16 +73,24 @@ workflow:
 
 secrets:
   githubToken:
+    create: false
     secretName: ""
     key: GITHUB_TOKEN
+    value: ""
   model:
+    create: false
     secretName: ""
     key: OPENAI_API_KEY
+    value: ""
   githubApp:
+    create: false
     secretName: ""
     appIdKey: GITHUB_APP_ID
     installationIdKey: GITHUB_INSTALLATION_ID
     privateKeyKey: GITHUB_APP_PRIVATE_KEY
+    appId: ""
+    installationId: ""
+    privateKey: ""
 
 resources: {}
 
