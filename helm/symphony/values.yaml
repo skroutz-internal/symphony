@@ -61,20 +61,22 @@ workflow:
       set -eu
       WORKER_HOST="${SYMPHONY_WORKER_HOST:-}"
       [ -n "$WORKER_HOST" ] || exit 0
-      RUN_SECRET_DIR="/run/symphony/staged-secrets"
+      RUN_SECRET_DIR="/var/lib/symphony/workspaces/.staged-secrets"
       TOKEN="$('/opt/symphony/bin/github-installation-token')"
 
-      ssh -F /etc/symphony/ssh/config "$WORKER_HOST" "install -d -m 700 '$RUN_SECRET_DIR'"
+      ssh -F /etc/symphony/ssh/config "$WORKER_HOST" "mkdir -p '$RUN_SECRET_DIR' && chmod 700 '$RUN_SECRET_DIR'"
       printf '%s' "$TOKEN" \
         | ssh -F /etc/symphony/ssh/config "$WORKER_HOST" "umask 077 && cat > '$RUN_SECRET_DIR/gh-token'"
     beforeRun: |
       set -eux
-      RUN_SECRET_DIR="/run/symphony/staged-secrets"
+      RUN_SECRET_DIR="/var/lib/symphony/workspaces/.staged-secrets"
       GH_TOKEN_FILE="$RUN_SECRET_DIR/gh-token"
       if [ ! -s "$GH_TOKEN_FILE" ] && [ -s /run/symphony/secrets/gh-token ]; then
         GH_TOKEN_FILE=/run/symphony/secrets/gh-token
       fi
       test -s "$GH_TOKEN_FILE"
+      mkdir -p "$RUN_SECRET_DIR"
+      chmod 700 "$RUN_SECRET_DIR"
       export SYMPHONY_GITHUB_TOKEN_FILE="$GH_TOKEN_FILE"
       export GIT_ASKPASS=/opt/symphony/bin/github-token-askpass
       export GIT_TERMINAL_PROMPT=0
@@ -147,14 +149,14 @@ workflow:
       set -eu
       WORKER_HOST="${SYMPHONY_WORKER_HOST:-}"
       [ -n "$WORKER_HOST" ] || exit 0
-      RUN_SECRET_DIR="/run/symphony/staged-secrets"
+      RUN_SECRET_DIR="/var/lib/symphony/workspaces/.staged-secrets"
       ssh -F /etc/symphony/ssh/config "$WORKER_HOST" "rm -rf '$RUN_SECRET_DIR'"
     beforeRemove: |
       set -eu
       if ! command -v gh >/dev/null 2>&1; then
         exit 0
       fi
-      GH_TOKEN_FILE="/run/symphony/staged-secrets/gh-token"
+      GH_TOKEN_FILE="/var/lib/symphony/workspaces/.staged-secrets/gh-token"
       if [ ! -s "$GH_TOKEN_FILE" ] && [ -s /run/symphony/secrets/gh-token ]; then
         GH_TOKEN_FILE=/run/symphony/secrets/gh-token
       fi
