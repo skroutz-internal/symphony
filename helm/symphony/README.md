@@ -21,18 +21,22 @@ helm install symphony ./helm/symphony -n symphony --create-namespace
 
 ## Required secrets
 
-For the current GitHub-backed workflow, Symphony should receive a GitHub token from an existing Kubernetes Secret.
+For the current GitHub-backed workflow, Symphony needs:
+- model credentials
+- GitHub App credentials
 
 Example values:
 
 ```yaml
 secrets:
-  githubToken:
-    secretName: symphony-github
-    key: GITHUB_TOKEN
   model:
     secretName: symphony-openai
     key: OPENAI_API_KEY
+  githubApp:
+    secretName: symphony-github-app
+    appIdKey: GITHUB_APP_ID
+    installationIdKey: GITHUB_INSTALLATION_ID
+    privateKeyKey: GITHUB_APP_PRIVATE_KEY
 ```
 
 Example Secret manifests:
@@ -41,36 +45,10 @@ Example Secret manifests:
 apiVersion: v1
 kind: Secret
 metadata:
-  name: symphony-github
-stringData:
-  GITHUB_TOKEN: <token>
----
-apiVersion: v1
-kind: Secret
-metadata:
   name: symphony-openai
 stringData:
-  OPENAI_API_KEY: <token>
-```
-
-## Optional GitHub App secret
-
-The chart can also mount GitHub App credentials for later app-based token brokering.
-
-Example values:
-
-```yaml
-secrets:
-  githubApp:
-    secretName: symphony-github-app
-    appIdKey: GITHUB_APP_ID
-    installationIdKey: GITHUB_INSTALLATION_ID
-    privateKeyKey: GITHUB_APP_PRIVATE_KEY
-```
-
-Expected Secret shape:
-
-```yaml
+  OPENAI_API_KEY: [REDACTED]
+---
 apiVersion: v1
 kind: Secret
 metadata:
@@ -79,15 +57,26 @@ stringData:
   GITHUB_APP_ID: "1234567"
   GITHUB_INSTALLATION_ID: "120103174"
   GITHUB_APP_PRIVATE_KEY: |
-    -----BEGIN PRIVATE KEY-----
-    ...
-    -----END PRIVATE KEY-----
+    [PRIVATE_KEY_REDACTED]
 ```
 
 When configured, the chart exposes:
 - `GITHUB_APP_ID`
 - `GITHUB_INSTALLATION_ID`
 - `GITHUB_APP_PRIVATE_KEY_PATH=/etc/symphony/github-app/app-private-key.pem`
+
+The rendered workflow sets:
+
+```yaml
+tracker:
+  api_key: "!/opt/symphony/bin/github-installation-token"
+```
+
+So Symphony mints a short-lived installation token on demand from the mounted app credentials.
+
+## Optional static token secret
+
+A static `GITHUB_TOKEN` secret can still be wired through `secrets.githubToken`, but it is no longer the default path for the GitHub tracker flow.
 
 ## Storage
 
@@ -145,6 +134,6 @@ Current chart scope and limitations:
 - no SSH worker wiring yet
 - no delegated per-run worker repo tokens yet
 - GitHub Project v2 control remains a Symphony concern, not a worker concern
-- the runtime still assumes `tracker.api_key` comes from `GITHUB_TOKEN` in the workflow/env
-- GitHub App token brokering is planned but not wired into Symphony runtime yet
+- the token is currently minted on demand via `!/opt/symphony/bin/github-installation-token`
+- there is no retry-on-401 or token refresh flow yet once a previously minted token expires during a long-running process
 - default storage mode is still `emptyDir`, so workspace state is not preserved unless persistence is explicitly enabled

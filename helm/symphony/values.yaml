@@ -27,7 +27,7 @@ workflow:
     projectNumber: 47
     projectRepositories:
       - skroutz-internal/rehersal
-    apiKey: '$GITHUB_TOKEN'
+    apiKey: '!/opt/symphony/bin/github-installation-token'
     activeStates:
       - Todo
       - In Progress

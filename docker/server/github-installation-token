@@ -1,0 +1,106 @@
+#!/usr/bin/env elixir
+
+base64url = fn data -> Base.url_encode64(data, padding: false) end
+
+require_env = fn name ->
+  case System.get_env(name) do
+    nil ->
+      IO.puts(:stderr, "missing required environment variable: #{name}")
+      System.halt(1)
+
+    "" ->
+      IO.puts(:stderr, "missing required environment variable: #{name}")
+      System.halt(1)
+
+    value ->
+      value
+  end
+end
+
+app_id = require_env.("GITHUB_APP_ID")
+installation_id = require_env.("GITHUB_INSTALLATION_ID")
+private_key_path = require_env.("GITHUB_APP_PRIVATE_KEY_PATH")
+github_api_url = System.get_env("GITHUB_API_URL") || "https://api.github.com"
+
+unless File.regular?(private_key_path) do
+  IO.puts(:stderr, "private key file is not readable: #{private_key_path}")
+  System.halt(1)
+end
+
+pem = File.read!(private_key_path)
+[pem_entry | _] = :public_key.pem_decode(pem)
+private_key = :public_key.pem_entry_decode(pem_entry)
+
+now = System.os_time(:second)
+iat = now - 60
+exp = now + 540
+
+header = ~s({"alg":"RS256","typ":"JWT"}) |> base64url.()
+payload = ~s({"iat":#{iat},"exp":#{exp},"iss":"#{app_id}"}) |> base64url.()
+unsigned_jwt = "#{header}.#{payload}"
+
+signature =
+  :public_key.sign(unsigned_jwt, :sha256, private_key)
+  |> base64url.()
+
+jwt = "#{unsigned_jwt}.#{signature}"
+url = String.trim_trailing(github_api_url, "/") <> "/app/installations/#{installation_id}/access_tokens"
+uri = URI.parse(url)
+ca_cert_path = "/etc/ssl/certs/ca-certificates.crt"
+
+unless is_binary(uri.host) do
+  IO.puts(:stderr, "invalid GITHUB_API_URL host: #{github_api_url}")
+  System.halt(1)
+end
+
+unless File.exists?(ca_cert_path) do
+  IO.puts(:stderr, "missing CA certificate bundle: #{ca_cert_path}")
+  System.halt(1)
+end
+
+:inets.start()
+:ssl.start()
+
+http_options = [
+  ssl: [
+    verify: :verify_peer,
+    cacertfile: String.to_charlist(ca_cert_path),
+    server_name_indication: String.to_charlist(uri.host),
+    customize_hostname_check: [match_fun: :public_key.pkix_verify_hostname_match_fun(:https)]
+  ]
+]
+
+request = {
+  String.to_charlist(url),
+  [
+    {~c"accept", ~c"application/vnd.github+json"},
+    {~c"authorization", String.to_charlist("Bearer #{jwt}")},
+    {~c"user-agent", ~c"symphony-github-installation-token"},
+    {~c"x-github-api-version", ~c"2022-11-28"}
+  ],
+  ~c"application/json",
+  ~c"{}"
+}
+
+case :httpc.request(:post, request, http_options, [body_format: :binary]) do
+  {:ok, {{_http_version, 201, _reason_phrase}, _headers, body}} ->
+    case Regex.run(~r/"token"\s*:\s*"([^"]+)"/, body, capture: :all_but_first) do
+      [token] -> IO.puts(token)
+      _ ->
+        IO.puts(:stderr, "failed to parse installation access token from GitHub response")
+        System.halt(1)
+    end
+
+  {:ok, {{_http_version, status, _reason_phrase}, _headers, body}} ->
+    IO.puts(:stderr, "GitHub token mint failed with HTTP #{status}")
+
+    if is_binary(body) and body != "" do
+      IO.puts(:stderr, body)
+    end
+
+    System.halt(1)
+
+  {:error, reason} ->
+    IO.puts(:stderr, "GitHub token mint request failed: #{inspect(reason)}")
+    System.halt(1)
+end

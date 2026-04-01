@@ -30,6 +30,9 @@ RUN useradd -m -d /var/lib/symphony -s /bin/bash symphony \
   && install -d -m 775 -o symphony -g symphony /var/lib/symphony/workspaces
 
 COPY --from=builder /build/bin/symphony /usr/local/bin/symphony
+COPY docker/server/github-installation-token /opt/symphony/bin/github-installation-token
+
+RUN chmod 755 /opt/symphony/bin/github-installation-token
 
 USER symphony
 WORKDIR /var/lib/symphony
