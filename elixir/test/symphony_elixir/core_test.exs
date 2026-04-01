@@ -1245,6 +1245,83 @@ defmodule SymphonyElixir.CoreTest do
     end
   end
 
+  test "agent runner fails when before_symphony_run fails and tolerates after_symphony_run failures" do
+    test_root =
+      Path.join(
+        System.tmp_dir!(),
+        "symphony-elixir-agent-runner-symphony-hook-failures-#{System.unique_integer([:positive])}"
+      )
+
+    try do
+      workspace_root = Path.join(test_root, "workspaces")
+      codex_binary = Path.join(test_root, "fake-codex")
+      codex_trace = Path.join(test_root, "codex.trace")
+      after_marker = Path.join(test_root, "after-symphony.log")
+
+      File.mkdir_p!(workspace_root)
+
+      File.write!(codex_binary, """
+      #!/bin/sh
+      trace_file="${SYMP_TEST_CODEx_TRACE:-/tmp/codex.trace}"
+      echo run >> "$trace_file"
+      count=0
+      while IFS= read -r _line; do
+        count=$((count + 1))
+        case "$count" in
+          1)
+            printf '%s\\n' '{"id":1,"result":{}}'
+            ;;
+          2)
+            ;;
+          3)
+            printf '%s\\n' '{"id":2,"result":{"thread":{"id":"thread-local"}}}'
+            ;;
+          4)
+            printf '%s\\n' '{"id":3,"result":{"turn":{"id":"turn-local"}}}'
+            printf '%s\\n' '{"method":"turn/completed"}'
+            exit 0
+            ;;
+        esac
+      done
+      """)
+
+      File.chmod!(codex_binary, 0o755)
+      System.put_env("SYMP_TEST_CODEx_TRACE", codex_trace)
+      on_exit(fn -> System.delete_env("SYMP_TEST_CODEx_TRACE") end)
+
+      write_workflow_file!(Workflow.workflow_file_path(),
+        workspace_root: workspace_root,
+        hook_before_symphony_run: "echo nope && exit 17",
+        codex_command: "#{codex_binary} app-server"
+      )
+
+      issue = %Issue{id: "issue-server-fail", identifier: "MT-SERVER-FAIL", state: "In Progress"}
+
+      assert_raise RuntimeError, ~r/before_symphony_run/, fn ->
+        AgentRunner.run(issue)
+      end
+
+      refute File.exists?(codex_trace)
+
+      write_workflow_file!(Workflow.workflow_file_path(),
+        workspace_root: workspace_root,
+        hook_after_symphony_run: "echo after_symphony_run >> #{after_marker} && exit 17",
+        codex_command: "#{codex_binary} app-server"
+      )
+
+      assert :ok =
+               AgentRunner.run(issue, nil,
+                 issue_state_fetcher: fn [_issue_id] -> {:ok, [%{issue | state: "Done"}]} end
+               )
+
+      assert File.read!(after_marker) == "after_symphony_run\n"
+      assert File.read!(codex_trace) =~ "run"
+    after
+      System.delete_env("SYMP_TEST_CODEx_TRACE")
+      File.rm_rf(test_root)
+    end
+  end
+
   test "agent runner continues with a follow-up turn while the issue remains active" do
     test_root =
       Path.join(

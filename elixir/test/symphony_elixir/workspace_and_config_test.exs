@@ -661,6 +661,17 @@ defmodule SymphonyElixir.WorkspaceAndConfigTest do
     end
   end
 
+  test "config accepts before_symphony_run and after_symphony_run hooks" do
+    write_workflow_file!(Workflow.workflow_file_path(),
+      hook_before_symphony_run: "echo before",
+      hook_after_symphony_run: "echo after"
+    )
+
+    hooks = Config.settings!().hooks
+    assert String.trim(hooks.before_symphony_run) == "echo before"
+    assert String.trim(hooks.after_symphony_run) == "echo after"
+  end
+
   test "workspace remove continues when before_remove hook fails" do
     test_root =
       Path.join(
