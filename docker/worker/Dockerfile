@@ -29,10 +29,11 @@ RUN useradd -m -s /bin/bash symphony \
 
 COPY docker/worker/sshd.conf /etc/ssh/sshd_config.d/symphony-worker.conf
 COPY docker/worker/entrypoint.sh /usr/local/bin/symphony-worker
+COPY docker/worker/github-token-askpass /opt/symphony/bin/github-token-askpass
 COPY pi-codex-shim.ts /opt/symphony/pi-codex-shim.ts
 COPY pi-skills /opt/symphony/.pi/skills
 COPY .pi/extensions /opt/symphony/.pi/extensions
-RUN chmod 755 /usr/local/bin/symphony-worker
+RUN chmod 755 /usr/local/bin/symphony-worker /opt/symphony/bin/github-token-askpass
 
 EXPOSE 22
 

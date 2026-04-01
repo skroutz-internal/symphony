@@ -57,8 +57,27 @@ workflow:
   worker:
     maxConcurrentAgentsPerHost: 1
   hooks:
+    beforeSymphonyRun: |
+      set -eu
+      WORKER_HOST="${SYMPHONY_WORKER_HOST:-}"
+      [ -n "$WORKER_HOST" ] || exit 0
+      RUN_SECRET_DIR="/run/symphony/staged-secrets"
+      TOKEN="$('/opt/symphony/bin/github-installation-token')"
+
+      ssh -F /etc/symphony/ssh/config "$WORKER_HOST" "install -d -m 700 '$RUN_SECRET_DIR'"
+      printf '%s' "$TOKEN" \
+        | ssh -F /etc/symphony/ssh/config "$WORKER_HOST" "umask 077 && cat > '$RUN_SECRET_DIR/gh-token'"
     beforeRun: |
       set -eux
+      RUN_SECRET_DIR="/run/symphony/staged-secrets"
+      GH_TOKEN_FILE="$RUN_SECRET_DIR/gh-token"
+      if [ ! -s "$GH_TOKEN_FILE" ] && [ -s /run/symphony/secrets/gh-token ]; then
+        GH_TOKEN_FILE=/run/symphony/secrets/gh-token
+      fi
+      test -s "$GH_TOKEN_FILE"
+      export SYMPHONY_GITHUB_TOKEN_FILE="$GH_TOKEN_FILE"
+      export GIT_ASKPASS=/opt/symphony/bin/github-token-askpass
+      export GIT_TERMINAL_PROMPT=0
       ISSUE_IDENTIFIER="${SYMPHONY_ISSUE_IDENTIFIER:?missing SYMPHONY_ISSUE_IDENTIFIER}"
       REMOTE_REPO="${ISSUE_IDENTIFIER%%#*}"
       ISSUE_NUMBER="${ISSUE_IDENTIFIER##*#}"
@@ -113,21 +132,36 @@ workflow:
       mkdir -p "$AGENT_DIR"
       {
         printf 'GH_TOKEN='
-        cat /run/symphony/secrets/gh-token
+        cat "$GH_TOKEN_FILE"
+        printf '\nGITHUB_TOKEN='
+        cat "$GH_TOKEN_FILE"
         printf '\nOPENAI_API_KEY='
         cat /run/symphony/secrets/openai-token
-        printf '\nPI_CODING_AGENT_DIR=%s\n' "$AGENT_DIR"
+        printf '\nSYMPHONY_GITHUB_TOKEN_FILE=%s\n' "$GH_TOKEN_FILE"
+        printf 'GIT_ASKPASS=/opt/symphony/bin/github-token-askpass\n'
+        printf 'GIT_TERMINAL_PROMPT=0\n'
+        printf 'PI_CODING_AGENT_DIR=%s\n' "$AGENT_DIR"
       } > "$TARGET_WORKTREE/.agent-env"
       printf 'MODEL=openai/gpt-5.3-codex\nSYMPHONY_AGENT_LOGS_ROOT=/symphony-logs\n' > "$TARGET_WORKTREE/.shim-env"
+    afterSymphonyRun: |
+      set -eu
+      WORKER_HOST="${SYMPHONY_WORKER_HOST:-}"
+      [ -n "$WORKER_HOST" ] || exit 0
+      RUN_SECRET_DIR="/run/symphony/staged-secrets"
+      ssh -F /etc/symphony/ssh/config "$WORKER_HOST" "rm -rf '$RUN_SECRET_DIR'"
     beforeRemove: |
       set -eu
       if ! command -v gh >/dev/null 2>&1; then
         exit 0
       fi
-      if [ ! -s /run/symphony/secrets/gh-token ]; then
+      GH_TOKEN_FILE="/run/symphony/staged-secrets/gh-token"
+      if [ ! -s "$GH_TOKEN_FILE" ] && [ -s /run/symphony/secrets/gh-token ]; then
+        GH_TOKEN_FILE=/run/symphony/secrets/gh-token
+      fi
+      if [ ! -s "$GH_TOKEN_FILE" ]; then
         exit 0
       fi
-      export GH_TOKEN="$(cat /run/symphony/secrets/gh-token)"
+      export GH_TOKEN="$(cat "$GH_TOKEN_FILE")"
       BRANCH="$(git branch --show-current || true)"
       if [ -z "$BRANCH" ]; then
         exit 0

@@ -37,8 +37,12 @@ data:
 {{- end }}
       max_concurrent_agents_per_host: {{ .Values.workflow.worker.maxConcurrentAgentsPerHost }}
     hooks:
+      before_symphony_run: |
+{{ .Values.workflow.hooks.beforeSymphonyRun | indent 8 }}
       before_run: |
 {{ .Values.workflow.hooks.beforeRun | indent 8 }}
+      after_symphony_run: |
+{{ .Values.workflow.hooks.afterSymphonyRun | indent 8 }}
       before_remove: |
 {{ .Values.workflow.hooks.beforeRemove | indent 8 }}
       timeout_ms: {{ .Values.workflow.hooks.timeoutMs }}
