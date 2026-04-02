@@ -40,7 +40,7 @@ workflow:
     projectNumber: 47
     projectRepositories:
       - skroutz-internal/rehersal
-    apiKey: '!/opt/symphony/bin/github-installation-token'
+    apiKey: '!/opt/symphony/bin/github-installation-token symphony'
     activeStates:
       - Todo
       - In Progress
@@ -62,7 +62,7 @@ workflow:
       WORKER_HOST="${SYMPHONY_WORKER_HOST:-}"
       [ -n "$WORKER_HOST" ] || exit 0
       RUN_SECRET_DIR="/var/lib/symphony/workspaces/.staged-secrets"
-      TOKEN="$('/opt/symphony/bin/github-installation-token')"
+      TOKEN="$('/opt/symphony/bin/github-installation-token' worker)"
 
       ssh -F /etc/symphony/ssh/config "$WORKER_HOST" "mkdir -p '$RUN_SECRET_DIR' && chmod 700 '$RUN_SECRET_DIR'"
       printf '%s' "$TOKEN" \
