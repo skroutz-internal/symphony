@@ -13,11 +13,11 @@ spec:
   replicas: 1
   selector:
     matchLabels:
-      {{- include "symphony.selectorLabels" . | nindent 6 }}
+      {{- include "symphony.serverSelectorLabels" . | nindent 6 }}
   template:
     metadata:
       labels:
-        {{- include "symphony.selectorLabels" . | nindent 8 }}
+        {{- include "symphony.serverSelectorLabels" . | nindent 8 }}
     spec:
       containers:
         - name: symphony

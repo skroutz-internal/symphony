@@ -46,6 +46,11 @@ app.kubernetes.io/name: {{ include "symphony.name" . }}
 app.kubernetes.io/instance: {{ .Release.Name }}
 {{- end -}}
 
+{{- define "symphony.serverSelectorLabels" -}}
+{{ include "symphony.selectorLabels" . }}
+app.kubernetes.io/component: server
+{{- end -}}
+
 {{- define "symphony.workerSelectorLabels" -}}
 {{ include "symphony.selectorLabels" . }}
 app.kubernetes.io/component: worker
