@@ -5,6 +5,7 @@ metadata:
   name: {{ include "symphony.workersServiceName" . }}
   labels:
     {{- include "symphony.labels" . | nindent 4 }}
+    {{- include "symphony.workerSelectorLabels" . | nindent 4 }}
 spec:
   clusterIP: None
   publishNotReadyAddresses: true

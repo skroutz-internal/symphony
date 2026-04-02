@@ -8,6 +8,7 @@ metadata:
   name: {{ include "symphony.workerFullname" . }}
   labels:
     {{- include "symphony.labels" . | nindent 4 }}
+    {{- include "symphony.workerSelectorLabels" . | nindent 4 }}
 spec:
   serviceName: {{ include "symphony.workersServiceName" . }}
   replicas: {{ .Values.worker.replicas }}
