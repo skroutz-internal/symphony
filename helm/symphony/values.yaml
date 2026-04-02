@@ -86,7 +86,7 @@ workflow:
       TARGET_WORKTREE="$(pwd)"
       BRANCH="symphony/issue-$ISSUE_NUMBER"
       REPO_URL="https://github.com/${REMOTE_REPO}.git"
-      CACHE_ROOT="/var/lib/symphony/git-cache"
+      CACHE_ROOT="/var/lib/symphony/workspaces/git-cache"
       CACHE_REPO="$CACHE_ROOT/${REMOTE_REPO//\//__}.git"
       PI_STATE_DIR=
 
