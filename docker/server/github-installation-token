@@ -17,10 +17,76 @@ require_env = fn name ->
   end
 end
 
+json_escape = fn value ->
+  value
+  |> String.replace("\\", "\\\\")
+  |> String.replace("\"", "\\\"")
+  |> String.replace("\n", "\\n")
+  |> String.replace("\r", "\\r")
+  |> String.replace("\t", "\\t")
+end
+
+usage = fn ->
+  IO.puts(:stderr, "usage: github-installation-token [symphony|worker]")
+  System.halt(1)
+end
+
+mode =
+  case System.argv() do
+    [] -> "symphony"
+    ["symphony"] -> "symphony"
+    ["worker"] -> "worker"
+    _ -> usage.()
+  end
+
 app_id = require_env.("GITHUB_APP_ID")
 installation_id = require_env.("GITHUB_INSTALLATION_ID")
 private_key_path = require_env.("GITHUB_APP_PRIVATE_KEY_PATH")
 github_api_url = System.get_env("GITHUB_API_URL") || "https://api.github.com"
+
+worker_repo = fn ->
+  repo =
+    System.get_env("GITHUB_WORKER_REPOSITORY") ||
+      case System.get_env("SYMPHONY_ISSUE_IDENTIFIER") do
+        nil -> nil
+        issue_identifier -> issue_identifier |> String.split("#", parts: 2) |> hd()
+      end
+
+  case repo do
+    nil ->
+      IO.puts(
+        :stderr,
+        "worker mode requires GITHUB_WORKER_REPOSITORY or SYMPHONY_ISSUE_IDENTIFIER"
+      )
+
+      System.halt(1)
+
+    "" ->
+      IO.puts(
+        :stderr,
+        "worker mode requires GITHUB_WORKER_REPOSITORY or SYMPHONY_ISSUE_IDENTIFIER"
+      )
+
+      System.halt(1)
+
+    repo ->
+      repo
+      |> String.trim()
+      |> String.split("/", parts: 2)
+      |> List.last()
+  end
+end
+
+request_body =
+  case mode do
+    "symphony" ->
+      ~s({"permissions":{"organization_projects":"write","repository_projects":"write","contents":"write","pull_requests":"write","issues":"write","metadata":"read"}})
+
+    "worker" ->
+      repo = worker_repo.() |> json_escape.()
+
+      ~s({"repositories":["#{repo}"],"permissions":{"repository_projects":"write","contents":"write","pull_requests":"write","issues":"write","metadata":"read"}})
+  end
 
 unless File.regular?(private_key_path) do
   IO.puts(:stderr, "private key file is not readable: #{private_key_path}")
@@ -75,11 +141,11 @@ request = {
   [
     {~c"accept", ~c"application/vnd.github+json"},
     {~c"authorization", String.to_charlist("Bearer #{jwt}")},
-    {~c"user-agent", ~c"symphony-github-installation-token"},
+    {~c"user-agent", String.to_charlist("symphony-github-installation-token/#{mode}")},
     {~c"x-github-api-version", ~c"2022-11-28"}
   ],
   ~c"application/json",
-  ~c"{}"
+  String.to_charlist(request_body)
 }
 
 case :httpc.request(:post, request, http_options, [body_format: :binary]) do
