@@ -77,8 +77,17 @@ workflow:
       test -s "$GH_TOKEN_FILE"
       mkdir -p "$RUN_SECRET_DIR"
       chmod 700 "$RUN_SECRET_DIR"
+      NETRC_FILE=/home/symphony/.netrc
+      {
+        printf 'machine github.com\n'
+        printf 'login x-access-token\n'
+        printf 'password '
+        cat "$GH_TOKEN_FILE"
+        printf '\n'
+      } > "$NETRC_FILE"
+      chmod 600 "$NETRC_FILE"
+      git config --global --unset-all credential.helper >/dev/null 2>&1 || true
       export SYMPHONY_GITHUB_TOKEN_FILE="$GH_TOKEN_FILE"
-      export GIT_ASKPASS=/opt/symphony/bin/github-token-askpass
       export GIT_TERMINAL_PROMPT=0
       ISSUE_IDENTIFIER="${SYMPHONY_ISSUE_IDENTIFIER:?missing SYMPHONY_ISSUE_IDENTIFIER}"
       REMOTE_REPO="${ISSUE_IDENTIFIER%%#*}"
@@ -140,7 +149,6 @@ workflow:
         printf '\nOPENAI_API_KEY='
         cat /run/symphony/secrets/openai-token
         printf '\nSYMPHONY_GITHUB_TOKEN_FILE=%s\n' "$GH_TOKEN_FILE"
-        printf 'GIT_ASKPASS=/opt/symphony/bin/github-token-askpass\n'
         printf 'GIT_TERMINAL_PROMPT=0\n'
         printf 'PI_CODING_AGENT_DIR=%s\n' "$AGENT_DIR"
       } > "$TARGET_WORKTREE/.agent-env"
@@ -150,7 +158,7 @@ workflow:
       WORKER_HOST="${SYMPHONY_WORKER_HOST:-}"
       [ -n "$WORKER_HOST" ] || exit 0
       RUN_SECRET_DIR="/var/lib/symphony/workspaces/.staged-secrets"
-      ssh -F /etc/symphony/ssh/config "$WORKER_HOST" "rm -rf '$RUN_SECRET_DIR'"
+      ssh -F /etc/symphony/ssh/config "$WORKER_HOST" "rm -rf '$RUN_SECRET_DIR' /home/symphony/.netrc"
     beforeRemove: |
       set -eu
       if ! command -v gh >/dev/null 2>&1; then
