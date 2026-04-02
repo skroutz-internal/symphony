@@ -6,9 +6,8 @@ This chart currently deploys:
 - one Symphony server `Deployment`
 - one `ConfigMap` with a rendered `WORKFLOW.md`
 - one `Service`
-- optional `Secret` resources for model and GitHub credentials
-
-It does **not** yet deploy workers.
+- an optional single-worker SSH `StatefulSet` and headless `Service`
+- optional `Secret` resources for model, GitHub, and SSH credentials
 
 ## Namespace
 
@@ -18,6 +17,19 @@ Example:
 
 ```bash
 helm install symphony ./helm/symphony -n symphony --create-namespace
+```
+
+For the `sympony-a` deployment, the current split is:
+- checked-in non-secret values: `helm/symphony/values-sympony-a.yaml`
+- local secret values: `~/.config/symphony/helm/sympony-a.secrets.yaml`
+
+Example:
+
+```bash
+helm upgrade --install symphony ./helm/symphony \
+  -n sympony-a \
+  -f helm/symphony/values-sympony-a.yaml \
+  -f ~/.config/symphony/helm/sympony-a.secrets.yaml
 ```
 
 ## Secret management modes
@@ -57,13 +69,17 @@ secrets:
     installationId: "120103174"
 ```
 
-Then pass the private key from a local file with `--set-file`:
+A practical pattern is to keep:
+- non-secret settings in a checked-in values file
+- secret material in a private values file outside git
+
+Then deploy with both files:
 
 ```bash
 helm upgrade --install symphony ./helm/symphony \
   -n symphony \
-  -f ~/.config/symphony/helm/private-values.yaml \
-  --set-file secrets.githubApp.privateKey=$HOME/.config/symphony/github-app/symphony-minions.pem
+  -f helm/symphony/values-<env>.yaml \
+  -f ~/.config/symphony/helm/<env>.secrets.yaml
 ```
 
 When `create: true` is set and `secretName` is empty, the chart creates default Secret names:

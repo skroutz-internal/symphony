@@ -1,0 +1,22 @@
+image:
+  pullPolicy: Always
+
+worker:
+  enabled: true
+  replicas: 1
+  image:
+    pullPolicy: Always
+
+secrets:
+  githubApp:
+    create: true
+    secretName: symphony-github-app-managed
+  githubToken:
+    create: true
+    secretName: symphony-worker-github-token
+  model:
+    create: true
+    secretName: symphony-worker-openai
+  workerSsh:
+    create: true
+    secretName: symphony-worker-ssh
