@@ -221,7 +221,12 @@ workflow:
     - project owner: `{{ tracker.project_owner }}` ({{ tracker.project_owner_type }})
     - project number: `{{ tracker.project_number }}`
 
-    Use the `gh` CLI for GitHub operations. `GH_TOKEN` is available in the agent environment. Do not touch unrelated repositories or projects.
+    Use the `gh` CLI for repository GitHub operations such as PRs, issues, branches, labels, and comments. Use the Symphony project tools for GitHub Project status operations:
+    - `github_project_get_status_options`
+    - `github_project_get_current_item`
+    - `github_project_move_current_item`
+
+    `GH_TOKEN` is available in the agent environment for `gh`. Do not touch unrelated repositories or projects.
     Read `SYMPHONY_AGENT_IDENTITY` from the environment and use that exact value to identify yourself in all GitHub interactions, for example in comments and PR replies.
 
     Status map:
@@ -244,7 +249,7 @@ workflow:
 
 
     1. Start by checking repo state: branch, `git status`, `HEAD`, existing PR for branch.
-    2. If the issue is `Todo`, move it to `In Progress` in GitHub Project 3 before coding.
+    2. If the issue is `Todo`, use `github_project_get_status_options` if needed, then move it to `In Progress` with `github_project_move_current_item` before coding.
     3. Reproduce and implement the requested change.
     4. Run relevant tests or validation before every push.
     5. Commit with a clear message.
@@ -252,21 +257,10 @@ workflow:
     7. Open or update a PR against `main`.
     8. Ensure the PR has label `symphony`.
     9. Ensure the issue and PR are linked (PR body or comment can reference the issue).
-    10. When implementation and checks are ready, move the project item to `Human Review`.
+    10. When implementation and checks are ready, move the project item to `Human Review` with `github_project_move_current_item`.
     11. In `Human Review`, run `pr_watch.py` from the `land` skill. It will block until feedback arrives.
     12. In `Merging`, explicitly read and follow the `land` skill. Do not call `gh pr merge` directly outside that skill flow.
-    13. After merge, move the project item to `Done`.
-
-    Helpful command pattern for project status updates (replace `<TARGET_STATE>` with the actual target state name, e.g. `Human Review`, `Merging`, `Rework`, `Done`):
-    ```bash
-    OWNER="{{ tracker.project_owner }}"
-    PROJECT_NUMBER="{{ tracker.project_number }}"
-    PROJECT_ID=$(gh project list --owner "$OWNER" --format json --jq ".projects[] | select(.number == $PROJECT_NUMBER) | .id")
-    ITEM_ID=$(gh project item-list "$PROJECT_NUMBER" --owner "$OWNER" --format json --jq '.items[] | select(.content.url == "{{ issue.url }}") | .id')
-    STATUS_FIELD_ID=$(gh project field-list "$PROJECT_NUMBER" --owner "$OWNER" --format json --jq '.fields[] | select(.name == "Status") | .id')
-    OPTION_ID=$(gh project field-list "$PROJECT_NUMBER" --owner "$OWNER" --format json --jq '.fields[] | select(.name == "Status") | .options[] | select(.name == "<TARGET_STATE>") | .id')
-    gh project item-edit --id "$ITEM_ID" --project-id "$PROJECT_ID" --field-id "$STATUS_FIELD_ID" --single-select-option-id "$OPTION_ID"
-    ```
+    13. After merge, move the project item to `Done` with `github_project_move_current_item`.
 
     When commenting on GitHub, prefix or sign your messages with `SYMPHONY_AGENT_IDENTITY` so humans can trace which Symphony agent produced them.
 
