@@ -1055,6 +1055,9 @@ defmodule SymphonyElixir.AppServerTest do
       tool_names = Enum.map(tools, & &1["name"])
 
       assert "github_agent" in tool_names
+      assert "github_project_get_status_options" in tool_names
+      assert "github_project_get_current_item" in tool_names
+      assert "github_project_move_current_item" in tool_names
       assert "push_to_symphony" in tool_names
     after
       File.rm_rf(test_root)
@@ -1098,9 +1101,7 @@ defmodule SymphonyElixir.AppServerTest do
       }
 
       assert {:ok, _result} =
-               AppServer.run(workspace, "/print-skills", issue,
-                 on_message: fn message -> send(test_pid, {:app_server_message, message}) end
-               )
+               AppServer.run(workspace, "/print-skills", issue, on_message: fn message -> send(test_pid, {:app_server_message, message}) end)
 
       assert_receive {:app_server_message,
                       %{
@@ -1792,7 +1793,6 @@ defmodule SymphonyElixir.AppServerTest do
     end
   end
 
-
   test "pi shim forwards token usage from agent_end in turn/completed" do
     test_root =
       Path.join(
@@ -1859,9 +1859,7 @@ defmodule SymphonyElixir.AppServerTest do
       test_pid = self()
 
       assert {:ok, _result} =
-               AppServer.run(workspace, "Verify token usage", issue,
-                 on_message: fn msg -> send(test_pid, {:app_server_message, msg}) end
-               )
+               AppServer.run(workspace, "Verify token usage", issue, on_message: fn msg -> send(test_pid, {:app_server_message, msg}) end)
 
       assert_receive {:app_server_message, %{event: :turn_completed, payload: payload}}, 10_000
 

@@ -105,7 +105,8 @@ defmodule SymphonyElixir.GitHub.ClientTest do
               %{
                 project_id: "PVT_x",
                 status_field_id: "PVTSSF_x",
-                status_options: %{"Todo" => "opt1", "Done" => "opt2"}
+                status_options: %{"Todo" => "opt1", "Done" => "opt2"},
+                status_option_names: ["Todo", "Done"]
               }} = result
     end
 
@@ -147,9 +148,7 @@ defmodule SymphonyElixir.GitHub.ClientTest do
       items = [make_item(1), make_item(2)]
 
       result =
-        Client.fetch_project_items("tok", "org", "acme", 1, [],
-          graphql_request_fun: metadata_and_items_mock("organization", items)
-        )
+        Client.fetch_project_items("tok", "org", "acme", 1, [], graphql_request_fun: metadata_and_items_mock("organization", items))
 
       assert {:ok, fetched} = result
       assert length(fetched) == 2
@@ -185,9 +184,7 @@ defmodule SymphonyElixir.GitHub.ClientTest do
       items = [make_item(1, "owner/repo", "Todo"), make_item(2, "owner/repo", "Done")]
 
       result =
-        Client.fetch_project_items("tok", "user", "owner", 1, [states: [" todo "]],
-          graphql_request_fun: metadata_and_items_mock("user", items)
-        )
+        Client.fetch_project_items("tok", "user", "owner", 1, [states: [" todo "]], graphql_request_fun: metadata_and_items_mock("user", items))
 
       assert {:ok, [item]} = result
       assert get_in(item, ["fieldValueByName", "name"]) == "Todo"
@@ -204,9 +201,7 @@ defmodule SymphonyElixir.GitHub.ClientTest do
       items = [make_item(1), make_item(2, "owner/other"), make_item(2)]
 
       result =
-        Client.fetch_project_item_by_issue("tok", "user", "owner", 1, "owner/repo", 2,
-          graphql_request_fun: metadata_and_items_mock("user", items)
-        )
+        Client.fetch_project_item_by_issue("tok", "user", "owner", 1, "owner/repo", 2, graphql_request_fun: metadata_and_items_mock("user", items))
 
       assert {:ok, item} = result
       assert get_in(item, ["content", "number"]) == 2
@@ -217,9 +212,7 @@ defmodule SymphonyElixir.GitHub.ClientTest do
       items = [make_item(1), make_item(3)]
 
       result =
-        Client.fetch_project_item_by_issue("tok", "user", "owner", 1, "owner/repo", 99,
-          graphql_request_fun: metadata_and_items_mock("user", items)
-        )
+        Client.fetch_project_item_by_issue("tok", "user", "owner", 1, "owner/repo", 99, graphql_request_fun: metadata_and_items_mock("user", items))
 
       assert {:error, :not_found} = result
     end
@@ -388,18 +381,14 @@ defmodule SymphonyElixir.GitHub.ClientTest do
   describe "error branches" do
     test "graphql request returning non-200 status returns api_status error" do
       result =
-        Client.resolve_project_metadata("tok", "user", "owner", 1,
-          graphql_request_fun: fn _q, _v, _t -> {:ok, %{status: 401, body: %{}}} end
-        )
+        Client.resolve_project_metadata("tok", "user", "owner", 1, graphql_request_fun: fn _q, _v, _t -> {:ok, %{status: 401, body: %{}}} end)
 
       assert {:error, {:github_api_status, 401}} = result
     end
 
     test "graphql request returning error tuple returns api_request error" do
       result =
-        Client.resolve_project_metadata("tok", "user", "owner", 1,
-          graphql_request_fun: fn _q, _v, _t -> {:error, %{reason: :econnrefused}} end
-        )
+        Client.resolve_project_metadata("tok", "user", "owner", 1, graphql_request_fun: fn _q, _v, _t -> {:error, %{reason: :econnrefused}} end)
 
       assert {:error, {:github_api_request, _}} = result
     end
@@ -408,18 +397,14 @@ defmodule SymphonyElixir.GitHub.ClientTest do
       errors = [%{"message" => "Field 'id' doesn't exist on type 'ProjectV2ItemFieldSingleSelectValue'"}]
 
       result =
-        Client.resolve_project_metadata("tok", "user", "owner", 1,
-          graphql_request_fun: fn _q, _v, _t -> {:ok, %{status: 200, body: %{"errors" => errors}}} end
-        )
+        Client.resolve_project_metadata("tok", "user", "owner", 1, graphql_request_fun: fn _q, _v, _t -> {:ok, %{status: 200, body: %{"errors" => errors}}} end)
 
       assert {:error, {:github_graphql_errors, ^errors, _body}} = result
     end
 
     test "parse_repo raises on invalid format" do
       assert_raise ArgumentError, ~r/invalid repo format/, fn ->
-        Client.create_comment("tok", "badformat", 1, "body",
-          rest_request_fun: fn _, _, _, _ -> {:ok, %{status: 201, body: %{}}} end
-        )
+        Client.create_comment("tok", "badformat", 1, "body", rest_request_fun: fn _, _, _, _ -> {:ok, %{status: 201, body: %{}}} end)
       end
     end
   end

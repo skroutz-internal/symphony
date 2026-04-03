@@ -211,7 +211,13 @@ defmodule SymphonyElixir.GitHub.Client do
     %{
       project_id: project_node["id"],
       status_field_id: get_in(project_node, ["field", "id"]),
-      status_options: options
+      status_options: options,
+      status_option_names:
+        project_node
+        |> get_in(["field", "options"])
+        |> List.wrap()
+        |> Enum.map(& &1["name"])
+        |> Enum.filter(&is_binary/1)
     }
   end
 
