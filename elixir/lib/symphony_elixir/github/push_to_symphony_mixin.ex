@@ -10,6 +10,7 @@ defmodule SymphonyElixir.GitHub.PushToSymphonyMixin do
       @push_to_symphony_input_schema %{
         "type" => "object",
         "properties" => %{},
+        "required" => [],
         "additionalProperties" => true,
         "description" => "Opaque payload forwarded back to Symphony control handlers."
       }

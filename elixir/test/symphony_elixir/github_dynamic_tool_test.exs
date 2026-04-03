@@ -81,13 +81,20 @@ defmodule SymphonyElixir.GitHub.DynamicToolTest do
   end
 
   test "tool_specs advertises GitHub project tools" do
-    tool_names = DynamicTool.tool_specs() |> Enum.map(& &1["name"])
+    specs = DynamicTool.tool_specs()
+    tool_names = Enum.map(specs, & &1["name"])
 
     assert "github_agent" in tool_names
     assert "github_project_get_status_options" in tool_names
     assert "github_project_get_current_item" in tool_names
     assert "github_project_move_current_item" in tool_names
     assert "push_to_symphony" in tool_names
+
+    assert %{"inputSchema" => %{"required" => []}} =
+             Enum.find(specs, &(&1["name"] == "github_project_get_status_options"))
+
+    assert %{"inputSchema" => %{"required" => []}} =
+             Enum.find(specs, &(&1["name"] == "github_project_get_current_item"))
   end
 
   test "unsupported tools return a failure payload with the supported tool list" do

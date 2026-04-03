@@ -55,6 +55,7 @@ defmodule SymphonyElixir.GitHub.DynamicTool do
   @empty_object_input_schema %{
     "type" => "object",
     "additionalProperties" => false,
+    "required" => [],
     "properties" => %{}
   }
 

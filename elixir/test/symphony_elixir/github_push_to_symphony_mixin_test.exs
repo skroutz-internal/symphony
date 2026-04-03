@@ -3,6 +3,11 @@ defmodule SymphonyElixir.GitHub.PushToSymphonyMixinTest do
 
   alias SymphonyElixir.GitHub.DynamicTool
 
+  test "push_to_symphony advertises an empty required parameter list" do
+    assert %{"inputSchema" => %{"required" => []}} =
+             Enum.find(DynamicTool.tool_specs(), &(&1["name"] == "push_to_symphony"))
+  end
+
   test "push_to_symphony echoes payloads and returns shim synthetic agent-end metadata" do
     response = DynamicTool.execute("push_to_symphony", %{"tools" => [%{"name" => "github_agent"}]})
 
